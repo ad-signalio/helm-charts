@@ -1,0 +1,23 @@
+
+{{ if .Values.storage.sharedStorage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.storage.sharedStorage.claimName }}
+  annotations:
+    {{- with .Values.storage.sharedStorage.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.useArgoSyncWaveAnnotations }}
+    {{- toYaml .Values.storage.sharedStorage.argoSyncWaveAnnotations | nindent 4 }}
+    # Note that we can't manage ordering of PVCs using helm hooks, without triggering impossible
+    # replace/delete cycles if the size or other values change.
+    {{- end }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ .Values.storage.sharedStorage.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.sharedStorage.size }}
+{{- end }}

@@ -1,0 +1,374 @@
+# SMTP configuration
+smtp:
+  enabled: false
+  # Secret containing SMTP credentials used by the application.
+  # The referenced Kubernetes Secret must exist and include the following keys:
+  # - SMTP_ADDRESS: SMTP server hostname (e.g. "smtp.example.com")
+  # - SMTP_DOMAIN: HELO/EHLO domain to use (e.g. "example.com")
+  # - SMTP_PORT: SMTP server port (e.g. "587")
+  # - SMTP_USER_NAME: Username for SMTP authentication (e.g. "admin@example.com")
+  # - SMTP_PASSWORD: Password for SMTP authentication
+  #
+  # Example: create the secret with kubectl
+  # kubectl create secret generic smtp-secrets \
+  #   --from-literal=SMTP_ADDRESS=smtp.example.com \
+  #   --from-literal=SMTP_DOMAIN=example.com \
+  #   --from-literal=SMTP_PORT=587 \
+  #   --from-literal=SMTP_USER_NAME=admin@example.com \
+  #   --from-literal=SMTP_PASSWORD=changeme
+  secret:
+    name: smtp-secrets
+    
+owningUser:
+  email: "admin@example.invalid"
+  firstName: "Admin"
+  lastName: "User"
+  # It's not recommended to set a static password here
+  #password: "notsecure"
+  organisationName: "Example Org"
+
+# Set to true to add ArgoCD sync wave annotations instead of Helm hooks - useful when deploying via ArgoCD
+useArgoSyncWaveAnnotations: false
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  repository: adsignal/hub
+  # This sets the pull policy for images.
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+fingerprinter:
+  image:
+    repository: adsignal/stream-fp
+    tag: "x86_64-linux-sha-ef4ee63"
+
+dbPrepareJob:
+  annotations: {}
+  helmHookAnnotations:
+    "helm.sh/hook": post-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+  argoSyncWaveAnnotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: '-1'
+
+rails_env: production
+logLevel: debug
+log_path_mode: "0664"
+log_path: /app/log/production.log
+
+storage:
+  # This is the shared storage for the application, it is required to be a ReadWriteMany PVC.
+  sharedStorage:
+    enabled: true
+    claimName: "match-shared-storage" # Operator provides a ReadWriteMany PVC for use on all pods.
+    storageClassName: "" # Optional storage class name
+    size: 100Gi
+    annotations: {}
+    argoSyncWaveAnnotations:
+      argocd.argoproj.io/hook: PreSync
+      argocd.argoproj.io/sync-wave: '-1'
+
+  # Only for use with local chart development
+  local:
+    enabled: false
+    createLocalStorageClass: false
+  # This is mounted at /tmp and is required by the application.
+  tmpStorage:
+    enabled: true
+    # Optionally you can set a limit on the size of emptyDir, but the application may need to store
+    # large files in /tmp so this should be suitable for the size of content the system is processing.
+    #sizeLimit: 200Gi
+
+# Any additional file systems that contain content, or secrets required by the application may be mounted here
+# These are mounted on all pods, so PVCs must be ReadOnlyMany
+volumes:
+  - name: tmp-volume
+    emptyDir: {}
+  - name: log-volume
+    emptyDir: {}
+    #- name: content-location
+    #  persistentVolumeClaim:
+    #    claimName: "content-pvc" # A PVC on the cluster that contains content to be processed by the application.
+    #- name: example-password
+    #  secret:
+    #    secretName: "example-password"
+volumeMounts: []
+  #- name: content-location
+  #  mountPath: "/content
+  #- name: example-password
+  #  readOnly: true
+  #  mountPath: "/etc/example-password"
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: "adsignal-match"
+fullnameOverride: "adsignal-match"
+
+extraEnvs: []
+  #- name: CUSTOMER_ENV
+  #  value: "testing-1"
+extraEnvSecrets: []
+  # - name: MY_SECRET_ENV
+  #   secretName: my-k8s-secret
+  #   secretKey: my-key
+
+contentSecrets: []
+  #- name: content-bucket
+  #  env_prefix: CONTENT
+  #  secret:
+  #    name: content-bucket-creds
+  #    key_id: access_key_id # sets CONTENT_ACCESS_KEY_ID
+  #    secret_access_key: secret_access_key # sets CONTENT_SECRET_ACCESS_KEY
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  helmHookAnnotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-2"
+  argoSyncWaveAnnotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: '-2'
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+metrics:
+  enabled: true
+  metricsPort: 9090
+
+# Ad Signal Workloads:
+webServers:
+  port: 3000
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 1Gi
+    limits:
+      memory: 1Gi
+
+railsConsole:
+  enabled: false
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+workers:
+  generic:
+    replicas: 1
+    queues:
+      - name: generic_queue
+        priority: 1
+      - name: generic_queue2
+        priority: 2
+    sidekiqConcurrency: 5
+    sidekiqTimeout: 25
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  ingest:
+    replicas: 1
+    queues:
+      - name: slow_queue
+        priority: 1
+    sidekiqConcurrency: 5
+    sidekiqTimeout: 25
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  process:
+    replicas: 1
+    queues:
+      - name: fast_queue
+        priority: 1
+    sidekiqConcurrency: 5
+    sidekiqTimeout: 25
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  fingerprinter:
+    replicas: 1
+    fingerprinter:
+      enabled: true
+      port: 6000
+      requests:
+        cpu: 3
+        memory: 1Gi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 1Gi
+    dbPoolSize: 1
+    dbFollowerPoolSize: 1
+    sidekiqConcurrency: 1
+    sidekiqTimeout: 600
+    queues:
+      - name: video_match_frames_native_fingerprint_tasks
+        priority: 1
+
+service:
+  type: ClusterIP
+  port: 3000
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Additional environment variables for the application
+env: []
+  # - name: EXAMPLE_VAR
+  #   value: "example_value"
+
+# Initial user configuration for seeding
+adminUser:
+  email: "admin@ad-signal.io"
+  firstName: "Admin"
+  lastName: "User"
+  roles: "email_and_password,assure_admin"
+  organisationName: "Ad Signal"
+  organisationRoles: "assure_admin"
+
+# PostgreSQL subchart configuration
+postgres:
+  enabled: false # WARNING: Using the subchart to provision postgres will nor provide backups or high availability.
+  fullnameOverride: "match-postgres" # Makes the database credentials appear on a known secret name
+  auth:
+    username: "matchdb"
+    database: "match"
+  primary:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# BYOP - Bring Your Own Postgres
+# postgres:
+# enabled: false # disabled because using external RDS
+# passwordSecret:
+#  name: "my-pg-secret"
+#  key: "password"
+# userNameSecret:
+#   name: "my-pg-secret"
+#   key: "username"
+# dbNameSecret:
+#   name: "my-pg-secret"
+#   key: "db_name"
+# auth:
+#   username: "match"
+
+sidekiq:
+  redisServerUrl: "redis://match-redis:6379/0"
+  # Optionally fetch the redis url from a config map on the cluster - overrides redisServerUrl
+  #redisServerConfigMap:
+  #  name: "my-redis-configmap"
+  #  key: "url"
+  redisClientUrl: "redis://match-redis:6379/0" # Redis client URL for Sidekiq
+  # Optionally fetch the redis client url from a config map on the cluster - overrides redisClientUrl
+  #redisClientConfigMap:
+  #  name: "my-redis-configmap"
+  #  key: "url"
+
+# Redis subchart configuration
+redis:
+  enabled: false
+  useSentinel: false
+  port: 6379
+  auth:
+    enabled: false
+  master:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+  replica:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# Global configuration for subcharts
+global:
+  redis:
+    password: "" # Auto-generated if left empty
+
+# S3 Configuration
+s3:
+  primaryBucket: "adsignal-primary-bucket"
+  accessKeyId: "dummy-key" # Replace with actual key
+  secretAccessKey: "dummy-secret" # Replace with actual secret
+  region: "us-east-1"
+
+domain: match-instance.example.com
+
+monitoring:
+  enabled: false
+  matchDashboards:
+    enabled: false
+# kube-prometheus-stack:
+#   prometheus:
+#     enabled: false
+# scrape PodMonitors and ServiceMonitors from all namespaces with any labels
+#  podMonitorSelector: {}
+#  podMonitorNamespaceSelector: {}
+#  serviceMonitorSelector: {}
+#  serviceMonitorNamespaceSelector: {}
+#   grafana:
+#     enabled: false
+# loki-stack:
+#   loki:
+#     enabled: false

@@ -1,0 +1,109 @@
+{{- range $name, $worker := .Values.workers }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-{{ include "match.fullname" $ }}
+  labels:
+    {{- include "match.labels" $ | nindent 4 }}
+spec:
+  strategy:
+    type: {{ $.Values.workerDeploymentStrategy | default "RollingUpdate" }}
+  replicas: {{ $worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "match.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}-worker
+  template:
+    metadata:
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "match.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}-worker
+        {{- with $.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "match.serviceAccountName" $ }}
+      {{- with $.Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $worker.fingerprinter }}
+      shareProcessNamespace: true
+      {{- end }}
+      containers:
+        - name: sidekiq-worker
+          {{- with $.Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "match.envVars" $ | nindent 12 }}
+            {{- include "match.workerEnvVars" (dict "worker" $worker) | nindent 12 }}
+            {{- if $worker.fingerprinter }}
+            - name: FINGERPRINTING_SERVICE_URL
+              value: "localhost:6000"
+            {{- end }}
+          command: [ "/usr/local/bin/bundle" ]
+          args:
+            - exec
+            - sidekiq
+            - "-c"
+            - "{{ $worker.sidekiqConcurrency }}"
+            {{- range $queue := $worker.queues }}
+            - "-q"
+            - "{{ $queue.name }},{{ $queue.priority -}}"
+            {{- end }}
+            - "-t"
+            - "{{$worker.sidekiqTimeout}}"
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: {{ $.Values.metrics.metricsPort }}
+          {{- with $worker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            {{- include "match.volumeMounts" $ | nindent 12 }}
+        {{- with $worker.fingerprinter }}
+        - name: fingerprinter
+          {{- with $.Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "match.envVars" $ | nindent 12 }}
+          image: "{{ $.Values.fingerprinter.image.repository }}:{{ $.Values.fingerprinter.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: [ "adsignal-stream-fp" ]
+          args: [ "server", "-p", {{.port | default 6000 | quote}} ]
+          resources:
+            {{- toYaml .resource | nindent 12 }}
+          volumeMounts:
+            {{- include "match.volumeMounts" $ | nindent 12 }}
+        {{- end }}
+      volumes:
+        {{- include "match.volumes" $ | nindent 8 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

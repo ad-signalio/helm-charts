@@ -1,0 +1,38 @@
+{{- if .Values.storage.local.createLocalStorageClass }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+  labels:
+    {{- include "match.labels" . | nindent 4 }}
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+{{- end }}
+{{ if .Values.storage.local.enabled }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Values.storage.sharedStorage.claimName }}
+  labels:
+    {{- include "match.labels" . | nindent 4 }}
+    type: shared-storage
+spec:
+  capacity:
+    storage: {{ .Values.storage.sharedStorage.size }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: local-storage
+  local:
+    path: /tmp
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/os
+          operator: In
+          values:
+          - linux
+{{- end }}

@@ -1,0 +1,35 @@
+apiVersion: v1
+entries:
+  adsignal-match:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2026-01-27T17:49:38.765067715Z"
+    dependencies:
+    - condition: postgres.enabled
+      name: postgres
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 0.5.0
+    - condition: redis.enabled
+      name: redis
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 0.3.3
+    - condition: monitoring.enabled
+      name: kube-prometheus-stack
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 78.4.0
+    - condition: monitoring.logging.enabled
+      name: loki-stack
+      repository: https://grafana.github.io/helm-charts
+      version: 2.10.2
+    description: Ad-Signal Match Self Hosted
+    digest: 0e66cca20178b779c5cc49c20b37c8d97af832083b210b779775468cf7fa7e47
+    home: https://ad-signal.io
+    maintainers:
+    - email: platform@ad-signal.io
+      name: Ad-Signal Match
+    name: adsignal-match
+    type: application
+    urls:
+    - https://github.com/ad-signalio/helm-charts/releases/download/adsignal-match-0.1.0/adsignal-match-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-01-27T17:49:38.765079768Z"

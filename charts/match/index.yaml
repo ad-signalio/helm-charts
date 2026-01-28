@@ -1,0 +1,191 @@
+apiVersion: v1
+entries:
+  kube-prometheus-stack:
+  - annotations:
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Chart Source
+          url: https://github.com/prometheus-community/helm-charts
+        - name: Upstream Project
+          url: https://github.com/prometheus-operator/kube-prometheus
+        - name: Upgrade Process
+          url: https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/README.md#upgrading-chart
+      artifacthub.io/operator: "true"
+    apiVersion: v2
+    appVersion: v0.86.1
+    created: "2026-01-28T09:33:41.690244Z"
+    dependencies:
+    - condition: crds.enabled
+      name: crds
+      repository: ""
+      version: 0.0.0
+    - condition: kubeStateMetrics.enabled
+      name: kube-state-metrics
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 6.3.0
+    - condition: nodeExporter.enabled
+      name: prometheus-node-exporter
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 4.48.0
+    - condition: grafana.enabled
+      name: grafana
+      repository: https://grafana.github.io/helm-charts
+      version: 10.1.2
+    - condition: windowsMonitoring.enabled
+      name: prometheus-windows-exporter
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 0.12.*
+    description: kube-prometheus-stack collects Kubernetes manifests, Grafana dashboards,
+      and Prometheus rules combined with documentation and scripts to provide easy
+      to operate end-to-end Kubernetes cluster monitoring with Prometheus using the
+      Prometheus Operator.
+    digest: 4d009221a5eb61b03126977599f1d6feb19e1aff042eb167e92e59f9cc5b62e3
+    home: https://github.com/prometheus-operator/kube-prometheus
+    icon: https://raw.githubusercontent.com/prometheus/prometheus.github.io/master/assets/prometheus_logo-cb55bb5c346.png
+    keywords:
+    - operator
+    - prometheus
+    - kube-prometheus
+    kubeVersion: '>=1.25.0-0'
+    maintainers:
+    - email: andrew@quadcorps.co.uk
+      name: andrewgkew
+      url: https://github.com/andrewgkew
+    - email: gianrubio@gmail.com
+      name: gianrubio
+      url: https://github.com/gianrubio
+    - email: github.gkarthiks@gmail.com
+      name: gkarthiks
+      url: https://github.com/gkarthiks
+    - email: kube-prometheus-stack@sisti.pt
+      name: GMartinez-Sisti
+      url: https://github.com/GMartinez-Sisti
+    - email: github@jkroepke.de
+      name: jkroepke
+      url: https://github.com/jkroepke
+    - email: scott@r6by.com
+      name: scottrigby
+      url: https://github.com/scottrigby
+    - email: miroslav.hadzhiev@gmail.com
+      name: Xtigyro
+      url: https://github.com/Xtigyro
+    - email: quentin.bisson@gmail.com
+      name: QuentinBisson
+      url: https://github.com/QuentinBisson
+    name: kube-prometheus-stack
+    sources:
+    - https://github.com/prometheus-community/helm-charts
+    - https://github.com/prometheus-operator/kube-prometheus
+    type: application
+    urls:
+    - charts/kube-prometheus-stack-78.4.0.tgz
+    version: 78.4.0
+  loki-stack:
+  - apiVersion: v1
+    appVersion: v2.9.3
+    created: "2026-01-28T09:33:41.697256Z"
+    dependencies:
+    - condition: loki.enabled
+      name: loki
+      repository: https://grafana.github.io/helm-charts
+      version: ^2.15.2
+    - condition: promtail.enabled
+      name: promtail
+      repository: https://grafana.github.io/helm-charts
+      version: ^6.7.4
+    - condition: fluent-bit.enabled
+      name: fluent-bit
+      repository: https://grafana.github.io/helm-charts
+      version: ^2.3.0
+    - condition: grafana.enabled
+      name: grafana
+      repository: https://grafana.github.io/helm-charts
+      version: ~6.43.0
+    - condition: prometheus.enabled
+      name: prometheus
+      repository: https://prometheus-community.github.io/helm-charts
+      version: ~19.7.2
+    - condition: filebeat.enabled
+      name: filebeat
+      repository: https://helm.elastic.co
+      version: ~7.17.1
+    - condition: logstash.enabled
+      name: logstash
+      repository: https://helm.elastic.co
+      version: ~7.17.1
+    description: 'Loki: like Prometheus, but for logs.'
+    digest: 92aff2644e1a76ebe092ca4cd28bf8861bbf8004f3a9d7d6c07550b4963ee9d5
+    home: https://grafana.com/loki
+    icon: https://raw.githubusercontent.com/grafana/loki/master/docs/sources/logo.png
+    kubeVersion: ^1.10.0-0
+    maintainers:
+    - email: lokiproject@googlegroups.com
+      name: Loki Maintainers
+    name: loki-stack
+    sources:
+    - https://github.com/grafana/loki
+    urls:
+    - charts/loki-stack-2.10.2.tgz
+    version: 2.10.2
+  postgres:
+  - apiVersion: v2
+    appVersion: "17.6"
+    created: "2026-01-28T09:33:41.698368Z"
+    dependencies:
+    - name: common
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 1.x.x
+    description: The World's Most Advanced Open Source Relational Database
+    digest: 05f99fc961edd9dc69246e356925851274170cebf63d51e099782d99059372a3
+    home: https://www.cloudpirates.io
+    icon: https://a.storyblok.com/f/143071/512x512/95e7f13e62/postgres-logo.svg
+    keywords:
+    - postgres
+    - postgresql
+    - database
+    - sql
+    - relational
+    maintainers:
+    - name: CloudPirates GmbH & Co. KG
+      url: https://www.cloudpirates.io
+    name: postgres
+    sources:
+    - https://github.com/CloudPirates-io/helm-charts/tree/main/charts/postgres
+    type: application
+    urls:
+    - charts/postgres-0.5.0.tgz
+    version: 0.5.0
+  redis:
+  - annotations:
+      category: Database
+      license: Apache-2.0
+    apiVersion: v2
+    appVersion: 8.2.1
+    created: "2026-01-28T09:33:41.699331Z"
+    dependencies:
+    - name: common
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 1.x.x
+    description: An open source, in-memory data structure store used as a database,
+      cache, and message broker.
+    digest: cd06de59258a1cab00cbd326cac77adbb2913d866c983a9327fb823b02e5fc21
+    home: https://www.cloudpirates.io
+    icon: https://a.storyblok.com/f/143071/512x512/32c74816d1/redis-logo.svg
+    keywords:
+    - redis
+    - database
+    - cache
+    - in-memory
+    - key-value
+    - nosql
+    maintainers:
+    - name: CloudPirates GmbH & Co. KG
+      url: https://www.cloudpirates.io
+    name: redis
+    sources:
+    - https://github.com/CloudPirates-io/helm-charts/tree/main/charts/redis
+    type: application
+    urls:
+    - charts/redis-0.3.3.tgz
+    version: 0.3.3
+generated: "2026-01-28T09:33:41.672232Z"

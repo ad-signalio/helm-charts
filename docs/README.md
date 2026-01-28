@@ -13,14 +13,14 @@ This folder serves as the root of the Helm repository that will be published via
 
 The following charts are available in this repository:
 
-- **adsignal-match** - Ad-Signal Match Self Hosted (v0.1.0)
+- **match** - Ad-Signal Match Self Hosted (v0.1.0)
 
 ## Getting Started 
 
 To add this Helm repository to your local Helm client:
 
 ```
-helm repo add adsignal-match https://ad-signalio.github.io/adsignal-match
+helm repo add match https://ad-signalio.github.io/match
 helm repo update
 ```
 

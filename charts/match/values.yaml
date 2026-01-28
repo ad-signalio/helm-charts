@@ -75,8 +75,6 @@ storage:
   local:
     enabled: false
     createLocalStorageClass: false
-  efs:
-    enabled: false
   # This is mounted at /tmp and is required by the application.
   tmpStorage:
     enabled: true
@@ -150,8 +148,7 @@ securityContext:
   capabilities:
     drop:
       - ALL
-  # TODO provide a writable /tmp
-  # readOnlyRootFilesystem: true
+  readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 1000
 
@@ -163,7 +160,6 @@ metrics:
 webServers:
   port: 3000
   replicas: 1
-  # TODO random
   resources:
     requests:
       cpu: 50m
@@ -191,7 +187,6 @@ workers:
         priority: 2
     sidekiqConcurrency: 5
     sidekiqTimeout: 25
-    # TODO set useful default values
     resources:
       requests:
         cpu: 100m
@@ -203,7 +198,6 @@ workers:
         priority: 1
     sidekiqConcurrency: 5
     sidekiqTimeout: 25
-    # TODO set useful default values
     resources:
       requests:
         cpu: 100m
@@ -215,7 +209,6 @@ workers:
         priority: 1
     sidekiqConcurrency: 5
     sidekiqTimeout: 25
-    # TODO set useful default values
     resources:
       requests:
         cpu: 100m
@@ -359,10 +352,6 @@ s3:
   accessKeyId: "dummy-key" # Replace with actual key
   secretAccessKey: "dummy-secret" # Replace with actual secret
   region: "us-east-1"
-
-# Image Processing Configuration
-image_processing:
-  phash_url: "http://adsignal-match-phash:5000/v1/phash"
 
 domain: match-instance.example.com
 

@@ -53,8 +53,6 @@
   value: "{{ .Values.s3.primaryBucket | default "adsignal-primary-bucket" }}"
 - name: S3_REGION
   value: "{{ .Values.s3.region | default "us-east-1" }}"
-- name: IMAGE_PHASH_URL
-  value: "{{ .Values.image_processing.phash_url | default "http://phash:5000/v1/phash" }}"
 - name: AWS_REGION
   value: "{{ .Values.s3.region | default "us-east-1" }}"
   {{- if .Values.domain }}

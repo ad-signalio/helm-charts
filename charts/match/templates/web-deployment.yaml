@@ -51,12 +51,10 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           livenessProbe:
-            # TODO whats a real health check?
             httpGet:
               path: /
               port: http
           readinessProbe:
-            # TODO whats a real health check?
             httpGet:
               path: /
               port: http

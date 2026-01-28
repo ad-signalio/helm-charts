@@ -20,7 +20,7 @@ The following charts are available in this repository:
 To add this Helm repository to your local Helm client:
 
 ```
-helm repo add match https://ad-signalio.github.io/match
+helm repo add match https://ad-signalio.github.io/helm-charts
 helm repo update
 ```
 

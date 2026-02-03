@@ -116,7 +116,7 @@ data:
             {
               "editorMode": "builder",
               "expr": "sidekiq_jobs_waiting_count{namespace=\"match\"}",
-              "legendFormat": '{{`{{ queue }}`}}',
+              "legendFormat": "{{ `{{` }} queue }} ",
               "range": true,
               "refId": "A"
             }
@@ -224,7 +224,7 @@ data:
             {
               "editorMode": "code",
               "expr": "kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\", pod=~\"${pod_type}-.+\"}",
-              "legendFormat": '{{`{{ pod }}`}}',
+              "legendFormat": "{{ `{{` }} pod }} ",
               "range": true,
               "refId": "A"
             }
@@ -323,7 +323,7 @@ data:
               "editorMode": "code",
               "expr": "increase(container_cpu_cfs_throttled_periods_total{namespace=\"match\", pod=~\"${pod_type}.+|\"}[$__rate_interval])",
               "instant": false,
-              "legendFormat": '{{`{{ pod }}`}}',
+              "legendFormat": "{{ `{{` }} pod }} ",
               "range": true,
               "refId": "A"
             }
@@ -512,7 +512,7 @@ data:
               "expr": "node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"match\", pod=~\"${pod_type}.+\", container=\"sidekiq-worker\"}",
               "hide": false,
               "instant": false,
-              "legendFormat": 'SideKiq: {{`{{ pod }}`}}',
+              "legendFormat": "SideKiq: {{ `{{` }} pod }}",
               "range": true,
               "refId": "A"
             },
@@ -551,7 +551,7 @@ data:
               "expr": "node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"match\", pod=~\"${pod_type}.+\", container!=\"sidekiq-worker\"}",
               "hide": false,
               "instant": false,
-              "legendFormat": 'Fingerprinter: {{`{{ pod }}`}}',
+              "legendFormat": "Fingerprinter: {{ `{{` }} pod }}",
               "range": true,
               "refId": "D"
             }
@@ -733,7 +733,7 @@ data:
               "expr": "container_memory_rss{namespace=\"match\", pod=~\"${pod_type}.+\", container=\"sidekiq-worker\"}",
               "hide": false,
               "instant": false,
-              "legendFormat": 'SideKiq: {{`{{ pod }}`}}',
+              "legendFormat": "SideKiq: {{ `{{` }} pod }}",
               "range": true,
               "refId": "A"
             },
@@ -772,7 +772,7 @@ data:
               "expr": "container_memory_rss{namespace=\"match\", pod=~\"${pod_type}.+\", container!=\"sidekiq-worker\"}",
               "hide": false,
               "instant": false,
-              "legendFormat": 'Fingerprinter: {{`{{ pod }}`}}',
+              "legendFormat": "Fingerprinter: {{ `{{` }} pod }}",
               "range": true,
               "refId": "D"
             }

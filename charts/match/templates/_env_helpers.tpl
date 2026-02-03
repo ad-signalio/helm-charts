@@ -71,6 +71,8 @@
   value: {{ .Values.postgres.auth.database | default "matchdb" | quote }}
 - name: DB_PRIMARY_HOST
   value: {{ .Values.postgres.fullnameOverride | default (printf "%s-postgres" (include "match.fullname" .)) }}
+- name: DB_REPLICA_HOSTS
+  value: {{ .Values.postgres.fullnameOverride | default (printf "%s-postgres" (include "match.fullname" .)) }}
 {{- else }}
 {{- if .Values.postgres.passwordSecret }}
 - name: DB_PASSWORD
@@ -108,8 +110,15 @@
     secretKeyRef:
       name: {{ .Values.postgres.dbPrimaryHostSecret.name }}
       key: {{ .Values.postgres.dbPrimaryHostSecret.key }}
+- name: DB_REPLICA_HOSTS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.postgres.dbPrimaryHostSecret.name }}
+      key: {{ .Values.postgres.dbPrimaryHostSecret.key }}
 {{- else}}
 - name: DB_PRIMARY_HOST
+  value: "{{ .Values.postgres.primaryHost }}"
+- name: DB_REPLICA_HOSTS
   value: "{{ .Values.postgres.primaryHost }}"
 {{- end }}
 {{- if .Values.postgres.dbPortSecret }}
@@ -151,6 +160,11 @@
     secretKeyRef:
       name: {{ .Values.smtp.secret.name }}
       key: SMTP_USER_NAME
+- name: MAILER_DEFAULT_FROM
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.smtp.secret.name }}
+      key: MAILER_DEFAULT_FROM
 {{- end }}
 {{- range $extraEnv := .Values.extraEnvs }}
 - name: {{ $extraEnv.name }}

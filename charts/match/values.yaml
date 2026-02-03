@@ -6,16 +6,18 @@ smtp:
   # - SMTP_ADDRESS: SMTP server hostname (e.g. "smtp.example.com")
   # - SMTP_DOMAIN: HELO/EHLO domain to use (e.g. "example.com")
   # - SMTP_PORT: SMTP server port (e.g. "587")
-  # - SMTP_USER_NAME: Username for SMTP authentication (e.g. "admin@example.com")
-  # - SMTP_PASSWORD: Password for SMTP authentication
+  # - SMTP_USER_NAME: Username for SMTP authentication (Using AWS SES this will be the AWS Access Key ID for the smtp user)
+  # - SMTP_PASSWORD: Password for SMTP authentication (Using AWS SES this will be AWS Secret Access Key for the smtp user)
+  # - MAILER_DEFAULT_FROM: Default "from" email address (e.g. "no-reply@example.com")
   #
   # Example: create the secret with kubectl
   # kubectl create secret generic smtp-secrets \
   #   --from-literal=SMTP_ADDRESS=smtp.example.com \
   #   --from-literal=SMTP_DOMAIN=example.com \
   #   --from-literal=SMTP_PORT=587 \
-  #   --from-literal=SMTP_USER_NAME=admin@example.com \
-  #   --from-literal=SMTP_PASSWORD=changeme
+  #   --from-literal=SMTP_USER_NAME='AKIABLAHBLAHBLAH' \
+  #   --from-literal=SMTP_PASSWORD='awssecretaccesskeyhere' \
+  #   --from-literal=MAILER_DEFAULT_FROM="no-reply@example.com"
   secret:
     name: smtp-secrets
     

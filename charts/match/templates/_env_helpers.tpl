@@ -151,6 +151,11 @@
     secretKeyRef:
       name: {{ .Values.smtp.secret.name }}
       key: SMTP_USER_NAME
+- name: MAILER_DEFAULT_FROM
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.smtp.secret.name }}
+      key: MAILER_DEFAULT_FROM
 {{- end }}
 {{- range $extraEnv := .Values.extraEnvs }}
 - name: {{ $extraEnv.name }}

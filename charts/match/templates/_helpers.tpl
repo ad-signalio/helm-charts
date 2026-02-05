@@ -94,31 +94,31 @@ Generate a consistent random password for the admin user
 {{- end }}
 {{- end }}
 {{- end }}
-
-
 {{- define "match.volumes" -}}
 {{- if .Values.storage.sharedStorage.enabled }}
 - name: {{ .Values.storage.sharedStorage.claimName }}
   persistentVolumeClaim:
     claimName: {{ .Values.storage.sharedStorage.claimName }}
 {{- end }}
+{{- if .Values.storage.tmpStorage.enabled }}
 - name: tmp-storage
   emptyDir:
     {{- if .Values.storage.tmpStorage.sizeLimit }}
     sizeLimit: {{ .Values.storage.tmpStorage.sizeLimit }}
     {{- end }}
+{{- end }}
 {{- with .Values.volumes }}
 {{ toYaml . }}
 {{- end }}
 {{- end }}
 {{- define "match.volumeMounts" -}}
-- name: tmp-volume
-  mountPath: /app/tmp
-- name: log-volume
-  mountPath: /app/log
 {{- if .Values.storage.sharedStorage.enabled }}
 - name: {{ .Values.storage.sharedStorage.claimName }}
   mountPath: /app/storage
+{{- end }}
+{{- if .Values.storage.tmpStorage.enabled }}
+- name: tmp-storage
+  mountPath: /tmp
 {{- end }}
 {{- with .Values.volumeMounts }}
 {{ toYaml . }}

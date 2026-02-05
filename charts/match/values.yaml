@@ -6,16 +6,18 @@ smtp:
   # - SMTP_ADDRESS: SMTP server hostname (e.g. "smtp.example.com")
   # - SMTP_DOMAIN: HELO/EHLO domain to use (e.g. "example.com")
   # - SMTP_PORT: SMTP server port (e.g. "587")
-  # - SMTP_USER_NAME: Username for SMTP authentication (e.g. "admin@example.com")
-  # - SMTP_PASSWORD: Password for SMTP authentication
+  # - SMTP_USER_NAME: Username for SMTP authentication (Using AWS SES this will be the AWS Access Key ID for the smtp user)
+  # - SMTP_PASSWORD: Password for SMTP authentication (Using AWS SES this will be AWS Secret Access Key for the smtp user)
+  # - MAILER_DEFAULT_FROM: Default "from" email address (e.g. "no-reply@example.com")
   #
   # Example: create the secret with kubectl
   # kubectl create secret generic smtp-secrets \
   #   --from-literal=SMTP_ADDRESS=smtp.example.com \
   #   --from-literal=SMTP_DOMAIN=example.com \
   #   --from-literal=SMTP_PORT=587 \
-  #   --from-literal=SMTP_USER_NAME=admin@example.com \
-  #   --from-literal=SMTP_PASSWORD=changeme
+  #   --from-literal=SMTP_USER_NAME='AKIABLAHBLAHBLAH' \
+  #   --from-literal=SMTP_PASSWORD='awssecretaccesskeyhere' \
+  #   --from-literal=MAILER_DEFAULT_FROM="no-reply@example.com"
   secret:
     name: smtp-secrets
     
@@ -68,16 +70,17 @@ storage:
     size: 100Gi
     annotations: {}
     argoSyncWaveAnnotations:
-      argocd.argoproj.io/hook: PreSync
       argocd.argoproj.io/sync-wave: '-1'
 
   # Only for use with local chart development
   local:
     enabled: false
     createLocalStorageClass: false
-  # This is mounted at /tmp and is required by the application.
+  # This is an emptyDir volume mounted at /tmp.
+  # Container entrypoint script creates a directory at `tmpStorage.path` with required permissions
   tmpStorage:
     enabled: true
+    path: /tmp/app_tmp # Must exist in /tmp.  Created by the entrypoint with the AP_SIGNAL_TMPDIR variable
     # Optionally you can set a limit on the size of emptyDir, but the application may need to store
     # large files in /tmp so this should be suitable for the size of content the system is processing.
     #sizeLimit: 200Gi
@@ -132,7 +135,6 @@ serviceAccount:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-2"
   argoSyncWaveAnnotations:
-    argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/sync-wave: '-2'
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
@@ -142,15 +144,16 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  fsGroup: 2000
+  runAsUser: 65532 # nonroot (65532) is a standard convention for "distroless" and hardened images
+  fsGroup: 65532
 
 securityContext:
   capabilities:
     drop:
       - ALL
   readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 1000
+  runAsUser: 65532
+  fsGroup: 65532
 
 metrics:
   enabled: true

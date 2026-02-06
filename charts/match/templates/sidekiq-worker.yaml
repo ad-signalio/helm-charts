@@ -52,8 +52,8 @@ spec:
             - name: FINGERPRINTING_SERVICE_URL
               value: "localhost:6000"
             {{- end }}
-          command: [ "/usr/local/bin/bundle" ]
           args:
+            - /usr/local/bin/bundle
             - exec
             - sidekiq
             - "-c"

@@ -31,8 +31,20 @@ storage:
     size: 45000Gi
 ```
 
+EFS mounts should, if possible, have permissions set to the application user id (nonroot):
+
+```yaml
+parameters:
+  directoryPerms: "755"
+  ...
+  gid: "65532"
+  uid: "65532"
+```
+
+nonroot (65532) is a standard convention for "distroless" and hardened images 
+
 #### Sizing the Volume
-The shared storage will hold temporary copies of ingested content files during processing and should be sized according to the number of workers and size of content. 
+The shared storage will hold temporary copies of ingested content files during processing and should be sized according to the number of workers and size of content.
 
 > Please consult with Ad-Signal technical services for sizing recommendations.
 
@@ -49,10 +61,15 @@ storage:
   ...
   tmpStorage:
     emptyDir:
-      sizeLimit: 500Gi
+      enabled: true
+      sizeLimit: 200Gi
 ```
 
 > Please consult with Ad-Signal technical services for sizing recommendations.
+
+#### Entrypoint
+
+Note: The match image includes an entrypoint script that handles the setting of permissions for the emptyDir volumes.
 
 ### S3 Buckets
 
@@ -204,14 +221,203 @@ domain: match.company.example.com
 A DNS entry must be configured to match the `domain` value pointing to the Ingress service providing TLS termination.
 
 ## Monitoring
+### Customer Responsibilities Checklist
+
+Before enabling monitoring, ensure you provide:
+- Persistent storage (minimum 10Gi) for Prometheus, Grafana, and Loki (if enabled)
+- Backup configuration for all persistent monitoring data (PVCs)
+- Ingress and DNS configuration for accessing dashboards
+- IAM roles and secrets for AWS integrations (CloudWatch, RDS, Redis, S3, etc.)
+- Secret management for sensitive credentials (e.g., database, Redis, SMTP)
+
+### PodMonitor and ServiceMonitor
+
+The chart uses Prometheus PodMonitor and ServiceMonitor resources to automatically discover and scrape metrics from pods and services. This ensures metrics collection adapts as pods are created, scaled, or replaced, providing reliable observability for all workloads.
+
+
+### Backup Guidance
+
+If you enable persistence for Prometheus or Grafana, ensure you back up the associated PVCs regularly. For more information, see [Kubernetes Volume Snapshots](https://kubernetes.io/docs/concepts/storage/volume-snapshots/) or your cloud provider's backup tools.
+
+### Troubleshooting
+
+- **No metrics in dashboards:** Check that PodMonitors/ServiceMonitors are deployed and Prometheus is scraping the correct endpoints.
+- **Dashboards not loading:** Ensure Grafana is running and accessible via ingress.
+- **Storage full:** Increase PVC size or clean up old data.
+- **No logs:** Verify your log aggregation solution is running and pods are configured to emit logs to the correct location.
+
+### Version Compatibility
+
+This chart requires Kubernetes 1.25+ and Helm 3.7+ for full compatibility with kube-prometheus-stack and dashboard features.
+
 
 The chart comes with dependencies that can install Grafana, Prometheus and Loki to the cluster to provide access to log, metrics and dashboards.
 These may require further configuration for your cluster's storage capabilities. You can bring your own monitoring and logging if you prefer.
 
+Setting `monitoring.enabled: true` installs [kube-prometheus-stack](https://github.com/grafana-community/helm-charts/tree/main/charts/grafana) as a subchart. If you chose to install this way, we recommend the following config to get metrics quickly. Please note that it requires 10Gi of storage minimum, and **does not have back ups enabled**. If you chose to install in this method we **highly** recommend configuring back ups to avoid loss of data.
+
+Please modify this config with your chosen ingress and storage solutions. For ease of use please refer to the following terraform for the iam role to use with grafana and redis credentials.
+
+- [Cloudwatch IAM role](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-iam-roles)
+- [Redis Credentials AWS Secret](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-elasticache-redis)
+
+
 ```
 monitoring:
   enabled: true
+  awsDashboards:
+    enabled: true
+    cloudwatch:
+      ## if you followed the reference architecture
+      ## terraform the iam role pattern will be
+      assumeRoleArn: arn:aws:iam::$YOUR_AWS_ACCOUNT_NUMBER_HERE$:role/$YOUR_CLUSTER_NAME_HERE-grafana-cloudwatch
+      defaultRegion: us-east-1
+  postgresDashboards:
+    enabled: true 
+  kube-prometheus-stack:
+    fullnameOverride: $YOUR_CLUSTER_NAME_HERE-kube-prometheus-stack
+    crds:
+      upgradeJob:
+        enabled: true
+        forceConflicts: true
+    grafana:
+      namespaceOverride: "match"
+      enabled: true
+      adminUser: admin
+      admin:
+        existingSecret: null
+        userKey: null
+        passwordKey: null
+      serviceAccount:
+        create: false
+        name: adsignal-match
+      ingress:
+        enabled: true
+        ingressClassName: $YOUR_INGRESS_CLASS_NAME_HERE
+        annotations:
+          $YOUR_INGRESS_ANNOTATIONS_HERE
+        hosts:
+          - $YOUR_INGRESS_HOSTNAME_HERE
+        paths:
+          - /*
+      extraSecretMounts:
+        - name: pg-secrets
+          ## if you followed the reference architecture
+          ## terraform the secret name is
+          ## $YOUR_CLUSTER_NAME_HERE-rds-pg
+          secretName: $YOUR_SECRET_NAME_HERE 
+          mountPath: /etc/secrets
+          readOnly: true
+          items:
+            - key: username
+              path: username
+            - key: password
+              path: password
+            - key: db_name
+              path: db_name
+            - key: host
+              path: host
+            - key: port
+              path: port
+      ## if using loki for logging
+      additionalDataSources:
+        - name: Loki
+          type: loki
+          url: $YOUR_LOKI_URL_HERE
+      persistence:
+        type: pvc
+        enabled: true
+        storageClassName: gp2
+        accessModes:
+          - ReadWriteOnce
+        size: 10Gi
+    prometheus:
+      service:
+        enabled: true
+        type: ClusterIP
+        port: 9090
+        targetPort: 9090
+      prometheusSpec:
+        ## scrape PodMonitors and ServiceMonitors 
+        ## from all namespaces with any labels
+        podMonitorSelector: {}
+        podMonitorSelectorNilUsesHelmValues: false
+        podMonitorNamespaceSelector: {}
+        serviceMonitorSelector: {}
+        serviceMonitorSelectorNilUsesHelmValues: false
+        serviceMonitorNamespaceSelector: {}
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: gp2
+              resources:
+                requests:
+                  storage: 10Gi
+    alertmanager:
+      enabled: false
 ```
+
+### Log Aggregation &  Alternatives
+
+You *can* install loki-stack by enabling
+
+```
+monitoring:
+  enabled: true
+  logging:
+    enabled: true
+```
+
+*However* this version of loki-stack is deprecated, and with no plan to move it to the `prometheus-community.github.io/helm-charts` repo, we recommend installing and maintaining your own loki deployment (or your log aggregation system of choice).
+
+## Getting the most out of your metrics
+
+We provide these dashboards:
+
+1. Match Processing Pipeline Overview
+
+This dashboard provides an overview of the Match processing pipeline in Kubernetes. It visualizes Sidekiq queue depths, OOM kills, CPU and memory usage, and throttling for different workload types (pods) in the "match" namespace. The dashboard uses Prometheus metrics and supports filtering by workload type. It helps operators monitor resource usage, queue health, and pod stability for Match workloads.
+
+When `metrics` is enabled, Helm creates a Prometheus PodMonitor for each defined worker type. Prometheus then scrapes metrics from the worker pods in the defined namespace (default is "match" namespace).
+
+Use this dashboard as a jumping point to discover any lags in processing.
+
+Enable this with: 
+```yaml
+monitoring:
+  matchDashboards:
+    enabled: true
+```
+
+2.  AWS RDS Dashboard 
+
+This is the [Grafana provided](https://grafana.com/grafana/dashboards/707-aws-rds/) AWS RDS dashboard. Here you can visualise key performance and health metrics for your Amazon RDS database. 
+
+Use this dashboard to quickly identify performance bottlenecks and resource saturation.
+
+Enable this with: 
+```yaml
+monitoring:
+  awsDashboards:
+    enabled: true
+    cloudwatch:
+      assumeRoleArn: arn:aws:iam::$YOUR_AWS_ACCOUNT_NUMBER_HERE$:role/$YOUR_CLUSTER_NAME_HERE-grafana-cloudwatch
+      defaultRegion: $YOUR_REGION
+```
+
+3. Postgres Dashboard
+
+The Postgres dashboard provides real-time visibility into your PostgreSQL database performance, including metrics like query throughput, cache hit rates, replication lag, and resource usage. It helps monitor database health, detect slow queries, and identify bottlenecks or abnormal behavior. 
+
+Use this dashboard to troubleshoot database issues, optimise performance, and ensure reliable operation of your Postgres instance.
+
+Enable this with: 
+```yaml
+monitoring:
+  postgresDashboards:
+    enabled: true
+```
+
 
 > Please consult with Ad-Signal technical services for monitoring configuration.
 
@@ -220,20 +426,22 @@ monitoring:
 Match can be configured to send email notifications via SMTP. To enable SMTP, we recommend creating a Kubernetes secret containing your SMTP credentials:
 
 ```bash
-kubectl create secret generic smtp-secrets \
-  --from-literal=SMTP_ADDRESS=smtp.example.com \
-  --from-literal=SMTP_DOMAIN=example.com \
-  --from-literal=SMTP_PORT=587 \
-  --from-literal=SMTP_USER_NAME=admin@example.com \
-  --from-literal=SMTP_PASSWORD=changeme
+  kubectl create secret generic smtp-secrets \
+    --from-literal=SMTP_ADDRESS=smtp.example.com \
+    --from-literal=SMTP_DOMAIN=example.com \
+    --from-literal=SMTP_PORT=587 \
+    --from-literal=SMTP_USER_NAME='AKIABLAHBLAHBLAH' \
+    --from-literal=SMTP_PASSWORD='awssecretaccesskeyhere' \
+    --from-literal=MAILER_DEFAULT_FROM="no-reply@example.com"
 ```
 
 The secret must include the following keys:
 - `SMTP_ADDRESS`: SMTP server hostname (e.g. "smtp.example.com")
 - `SMTP_DOMAIN`: HELO/EHLO domain to use (e.g. "example.com")
 - `SMTP_PORT`: SMTP server port (e.g. "587")
-- `SMTP_USER_NAME`: Username for SMTP authentication (e.g. "admin@example.com")
-- `SMTP_PASSWORD`: Password for SMTP authentication
+- `SMTP_USER_NAME`: Username for SMTP authentication (Using AWS SES this will be the AWS Access Key ID for the smtp user)
+- `SMTP_PASSWORD`: Password for SMTP authentication (Using AWS SES this will be AWS Secret Access Key for the smtp user)
+- `MAILER_DEFAULT_FROM` : The default 'no-reply' address you wish to use. (e.g "no-reply@example.com")
 
 Then enable SMTP in your values file:
 

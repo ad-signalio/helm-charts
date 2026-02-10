@@ -5,7 +5,7 @@
 This chart will install a self hosted Match service.
 
 It is strongly suggested that you run this chart on a Kubernetes cluster dedicated to match. We provide a reference implementation suitable
-for AWS [here](https://github.com/ad-signalio/match-environment/)
+for AWS [here](https://github.com/ad-signalio/match-reference-architecture)
 
 ## Requirements
 
@@ -41,7 +41,7 @@ parameters:
   uid: "65532"
 ```
 
-nonroot (65532) is a standard convention for "distroless" and hardened images 
+nonroot (65532) is a standard convention for "distroless" and hardened images
 
 #### Sizing the Volume
 The shared storage will hold temporary copies of ingested content files during processing and should be sized according to the number of workers and size of content.
@@ -273,7 +273,7 @@ monitoring:
       assumeRoleArn: arn:aws:iam::$YOUR_AWS_ACCOUNT_NUMBER_HERE$:role/$YOUR_CLUSTER_NAME_HERE-grafana-cloudwatch
       defaultRegion: us-east-1
   postgresDashboards:
-    enabled: true 
+    enabled: true
   kube-prometheus-stack:
     fullnameOverride: $YOUR_CLUSTER_NAME_HERE-kube-prometheus-stack
     crds:
@@ -305,7 +305,7 @@ monitoring:
           ## if you followed the reference architecture
           ## terraform the secret name is
           ## $YOUR_CLUSTER_NAME_HERE-rds-pg
-          secretName: $YOUR_SECRET_NAME_HERE 
+          secretName: $YOUR_SECRET_NAME_HERE
           mountPath: /etc/secrets
           readOnly: true
           items:
@@ -338,7 +338,7 @@ monitoring:
         port: 9090
         targetPort: 9090
       prometheusSpec:
-        ## scrape PodMonitors and ServiceMonitors 
+        ## scrape PodMonitors and ServiceMonitors
         ## from all namespaces with any labels
         podMonitorSelector: {}
         podMonitorSelectorNilUsesHelmValues: false
@@ -382,20 +382,20 @@ When `metrics` is enabled, Helm creates a Prometheus PodMonitor for each defined
 
 Use this dashboard as a jumping point to discover any lags in processing.
 
-Enable this with: 
+Enable this with:
 ```yaml
 monitoring:
   matchDashboards:
     enabled: true
 ```
 
-2.  AWS RDS Dashboard 
+2.  AWS RDS Dashboard
 
-This is the [Grafana provided](https://grafana.com/grafana/dashboards/707-aws-rds/) AWS RDS dashboard. Here you can visualise key performance and health metrics for your Amazon RDS database. 
+This is the [Grafana provided](https://grafana.com/grafana/dashboards/707-aws-rds/) AWS RDS dashboard. Here you can visualise key performance and health metrics for your Amazon RDS database.
 
 Use this dashboard to quickly identify performance bottlenecks and resource saturation.
 
-Enable this with: 
+Enable this with:
 ```yaml
 monitoring:
   awsDashboards:
@@ -407,11 +407,11 @@ monitoring:
 
 3. Postgres Dashboard
 
-The Postgres dashboard provides real-time visibility into your PostgreSQL database performance, including metrics like query throughput, cache hit rates, replication lag, and resource usage. It helps monitor database health, detect slow queries, and identify bottlenecks or abnormal behavior. 
+The Postgres dashboard provides real-time visibility into your PostgreSQL database performance, including metrics like query throughput, cache hit rates, replication lag, and resource usage. It helps monitor database health, detect slow queries, and identify bottlenecks or abnormal behavior.
 
 Use this dashboard to troubleshoot database issues, optimise performance, and ensure reliable operation of your Postgres instance.
 
-Enable this with: 
+Enable this with:
 ```yaml
 monitoring:
   postgresDashboards:

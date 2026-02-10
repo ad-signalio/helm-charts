@@ -2,12 +2,12 @@ apiVersion: v2
 name: adsignal-match
 description: Ad-Signal Match Self Hosted
 home: https://ad-signal.io
-version: 0.1.1
+version: 1.0.0
 maintainers:
   - name: Ad-Signal Match
     email: platform@ad-signal.io
 type: application
-appVersion: "1.16.0"
+appVersion: "1.0.0"
 
 dependencies:
   - name: postgres

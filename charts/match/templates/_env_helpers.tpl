@@ -49,6 +49,42 @@
   value: "shdbjhsbdfs"
 - name: "RAILS_LOG_TO_STDOUT"
   value: "1"
+{{- if or .Values.secretKeys.apiSecretKeyBase.generate .Values.secretKeys.apiSecretKeyBase.existingSecret }}
+- name: API_SECRET_KEY_BASE
+  valueFrom:
+    secretKeyRef:
+      {{- if .Values.secretKeys.apiSecretKeyBase.existingSecret }}
+      name: {{ .Values.secretKeys.apiSecretKeyBase.existingSecret.name }}
+      key: {{ .Values.secretKeys.apiSecretKeyBase.existingSecret.key }}
+      {{- else }}
+      name: {{ include "match.fullname" . }}-api-secrets
+      key: apiSecretKeyBase
+      {{- end }}
+{{- end }}
+{{- if or .Values.secretKeys.secretKeyBase.generate .Values.secretKeys.secretKeyBase.existingSecret }}
+- name: SECRET_KEY_BASE
+  valueFrom:
+    secretKeyRef:
+      {{- if .Values.secretKeys.secretKeyBase.existingSecret }}
+      name: {{ .Values.secretKeys.secretKeyBase.existingSecret.name }}
+      key: {{ .Values.secretKeys.secretKeyBase.existingSecret.key }}
+      {{- else }}
+      name: {{ include "match.fullname" . }}-api-secrets
+      key: secretKeyBase
+      {{- end }}
+{{- end }}
+{{- if or .Values.secretKeys.ingestCredentialEncryptionKey.generate .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret }}
+- name: INGEST_CREDENTIAL_ENCRYPTION_KEY
+  valueFrom:
+    secretKeyRef:
+      {{- if .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret }}
+      name: {{ .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret.name }}
+      key: {{ .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret.key }}
+      {{- else }}
+      name: {{ include "match.fullname" . }}-api-secrets
+      key: ingestCredentialEncryptionKey
+      {{- end }}
+{{- end }}
 - name: S3_PRIMARY_BUCKET
   value: "{{ .Values.s3.primaryBucket | default "adsignal-primary-bucket" }}"
 - name: S3_REGION
@@ -70,6 +106,8 @@
 - name: DB_DATABASE
   value: {{ .Values.postgres.auth.database | default "matchdb" | quote }}
 - name: DB_PRIMARY_HOST
+  value: {{ .Values.postgres.fullnameOverride | default (printf "%s-postgres" (include "match.fullname" .)) }}
+- name: DB_REPLICA_HOSTS
   value: {{ .Values.postgres.fullnameOverride | default (printf "%s-postgres" (include "match.fullname" .)) }}
 {{- else }}
 {{- if .Values.postgres.passwordSecret }}
@@ -108,8 +146,15 @@
     secretKeyRef:
       name: {{ .Values.postgres.dbPrimaryHostSecret.name }}
       key: {{ .Values.postgres.dbPrimaryHostSecret.key }}
+- name: DB_REPLICA_HOSTS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.postgres.dbPrimaryHostSecret.name }}
+      key: {{ .Values.postgres.dbPrimaryHostSecret.key }}
 {{- else}}
 - name: DB_PRIMARY_HOST
+  value: "{{ .Values.postgres.primaryHost }}"
+- name: DB_REPLICA_HOSTS
   value: "{{ .Values.postgres.primaryHost }}"
 {{- end }}
 {{- if .Values.postgres.dbPortSecret }}
@@ -151,6 +196,20 @@
     secretKeyRef:
       name: {{ .Values.smtp.secret.name }}
       key: SMTP_USER_NAME
+- name: MAILER_DEFAULT_FROM
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.smtp.secret.name }}
+      key: MAILER_DEFAULT_FROM
+{{- end }}
+{{- if .Values.honeybadger }}
+- name: HONEYBADGER_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.honeybadger.secretName }}
+      key: {{ .Values.honeybadger.secretKey }}
+- name: HONEYBADGER_ENV
+  value: "{{ required "honeybadger.environment is required. Please provide your Honeybadger environment name in values.yaml" .Values.honeybadger.environment }}"
 {{- end }}
 {{- range $extraEnv := .Values.extraEnvs }}
 - name: {{ $extraEnv.name }}
@@ -167,6 +226,13 @@
 - name: PROMETHEUS_EXPORTER_PORT
   value: "{{ .Values.metrics.metricsPort }}"
 {{- else }}
+{{- end }}
+{{- if .Values.storage.tmpStorage.enabled }}
+{{- if not (hasPrefix "/tmp" .Values.storage.tmpStorage.path) }}
+{{- fail "storage.tmpStorage.path must be located in /tmp directory" }}
+{{- end }}
+- name: AD_SIGNAL_TMPDIR
+  value: {{ .Values.storage.tmpStorage.path }}
 {{- end }}
 {{- end }}
 

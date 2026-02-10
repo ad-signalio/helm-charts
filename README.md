@@ -12,7 +12,7 @@ This repository hosts Helm charts for ad-signalio projects, published via GitHub
 Add this repository to your Helm client:
 
 ```bash
-helm repo add match https://ad-signalio.github.io/helm-charts
+helm repo add ad-signalio https://ad-signalio.github.io/helm-charts
 helm repo update
 ```
 

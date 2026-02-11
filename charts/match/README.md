@@ -679,6 +679,17 @@ s3:
 
 For configuring image pull secrets to authenticate with the Ad Signal container registry, see the [Image Pull Secrets](README.md#image-pull-secrets) section in the main README.
 
+
+## 8. Network Access Retirements
+
+| Direction | Service | Address(s) | Port | Description |
+|-----------|---------|------------|------|-------------|
+| Egress | Honeybadger | api.honeybadger.io | 443 | Application Error tracking [Honeybadger API IP addresses](https://docs.honeybadger.io/resources/security/#for-exception-monitoring)|
+| Egress | Docker Image | TBC | | Image hosting location supplied |
+| Egress | Helm Chart | ad-signalio.github.io | 443 | Our public Helm Chart repository
+| Egress | SMTP | Customers SMTP server | - | For password resets etc. |
+| Ingress | Web/API | Customer domain | 443 | Access to Web interface and API |
+
 ---
 
 ## Quick Start Checklist

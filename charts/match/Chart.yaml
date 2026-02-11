@@ -2,7 +2,7 @@ apiVersion: v2
 name: adsignal-match
 description: Ad-Signal Match Self Hosted
 home: https://ad-signal.io
-version: 1.0.0
+version: 1.0.1
 maintainers:
   - name: Ad-Signal Match
     email: platform@ad-signal.io

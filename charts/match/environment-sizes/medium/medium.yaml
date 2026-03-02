@@ -1,0 +1,132 @@
+workers:
+  fingerprinter:
+    replicas: 4
+    fingerprinter:
+      enabled: true
+      port: 6000
+    resources:
+      requests:
+        cpu: 8500m # 8 for fingerprinter + 1 for sidekiq overhead
+        memory: 3500Mi # only really need about 2500 for fingerprinter + 700 for sidekiq overhead
+      limits:
+        cpu: 8500m
+        memory: 3500Mi
+    dbPoolSize: 1
+    dbFollowerPoolSize: 1
+    sidekiqConcurrency: 1
+    sidekiqTimeout: 600
+    queues:
+      - name: video_match_frames_native_fingerprint_tasks
+        priority: 1
+      - name: native_audio_processing_tasks
+        priority: 1
+  ingest:
+    replicas: 4
+    dbPoolSize: 4
+    dbFollowerPoolSize: 4
+    sidekiqConcurrency: 4
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    queues:
+      - name: proxy_generate_tasks
+        priority: 1
+      - name: video_match_frames_attach_image_tasks
+        priority: 1
+      - name: process_materials
+        priority: 1
+      - name: ingest_materials
+        priority: 1
+      - name: process_qc
+        priority: 1
+      - name: process_media
+        priority: 1
+      - name: download_media
+        priority: 1
+  audiomatchfingerprint:
+    replicas: 3
+    sidekiqConcurrency: 1 # Limit the concurrency to reduce RAM usage - at least we can use graphs to show how much RAM a Audio comparison job is taking on it's own
+    dbPoolSize: 1
+    dbFollowerPoolSize: 1
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1500Mi # OOM kils at 1gi
+      requests:
+        cpu: 500m
+        memory: 1500Mi
+    queues:
+      - name: audio_match_frames_fingerprint_tasks
+        priority: 1
+  process:
+    replicas: 4
+    sidekiqConcurrency: 10
+    dbPoolSize: 10
+    dbFollowerPoolSize: 10
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+      requests:
+        cpu: 2000m
+        memory: 8Gi
+    queues:
+      - name: complete_materials
+        priority: 1
+      - name: compare_materials_results
+        priority: 1
+      - name: audio_insights
+        priority: 1
+      - name: ai_tagging
+        priority: 1
+      - name: video_unique_frames_create_groups_tasks
+        priority: 1
+      - name: video_unique_frames_create_tasks
+        priority: 1
+      - name: video_whole_media_compare_tasks
+        priority: 1
+      - name: relate_materials
+        priority: 1
+      - name: process_sbf
+        priority: 1
+      - name: audio_match_frames_fingerprint_tasks
+        priority: 1
+      - name: video_match_frames_extract_frames_tasks
+        priority: 1
+      - name: video_match_frames_extract_tasks
+        priority: 1
+      - name: video_match_frames_fingerprint_tasks
+        priority: 1
+      - name: process_frames
+        priority: 1
+      - name: ingest_frames
+        priority: 1
+  generic:
+    replicas: 2
+    sidekiqConcurrency: 10
+    dbPoolSize: 10
+    dbFollowerPoolSize: 10
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 500m
+        memory: 700Mi
+      requests:
+        cpu: 500m
+        memory: 700Mi
+    queues:
+      - name: default
+        priority: 1
+      - name: pipeline
+        priority: 2
+      - name: mailers
+        priority: 3
+      - name: active_storage_purge
+        priority: 4

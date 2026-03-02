@@ -1,0 +1,162 @@
+####
+# c8i.4xlarge Summary
+# CPU: 16 vCPUs
+# Memory: 32 GiB
+# Allocated resources:
+#   (Total limits may be over 100 percent, i.e., overcommitted.)
+#   Resource           Requests               Limits
+#   --------           --------               ------
+#   cpu                14370m (90%)           14950m (94%)
+#   memory             17116115763200m (60%)  22933615411200m (81%)
+####
+workers:
+  fingerprinter:
+    replicas: 1
+    fingerprinter:
+      enabled: true
+      port: 6000
+      resource: # Nested 'resource' block for fingerprinter image resource requests/limits
+        limits:
+          cpu: 4.5
+          memory: 2Gi
+        requests:
+          cpu: 4.5
+          memory: 2Gi
+    resources:
+      requests:
+        cpu: 0.4
+        memory: 0.7Gi # SideKiq extremeley light here.
+      limits:
+        cpu: 0.5
+        memory: 0.7Gi
+    dbPoolSize: 1
+    dbFollowerPoolSize: 1
+    sidekiqConcurrency: 1
+    sidekiqTimeout: 600
+    queues:
+      - name: video_match_frames_native_fingerprint_tasks
+        priority: 1
+      - name: native_audio_processing_tasks
+        priority: 1
+  ingest:
+    replicas: 2
+    dbPoolSize: 4
+    dbFollowerPoolSize: 4
+    sidekiqConcurrency: 2
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 1
+        memory: 0.8Gi
+      requests:
+        cpu: 1
+        memory: 0.8Gi
+    queues:
+      - name: proxy_generate_tasks
+        priority: 1
+      - name: video_match_frames_attach_image_tasks
+        priority: 1
+      - name: process_materials
+        priority: 1
+      - name: ingest_materials
+        priority: 1
+      - name: process_qc
+        priority: 1
+      - name: process_media
+        priority: 1
+      - name: download_media
+        priority: 1
+  audiomatchfingerprint:
+    replicas: 1
+    sidekiqConcurrency: 1 # Limit the concurrency to reduce RAM usage - at least we can use graphs to show how much RAM a Audio comparison job is taking on it's own
+    dbPoolSize: 1
+    dbFollowerPoolSize: 1
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 1.5
+        memory: 2.5Gi # Safe from OOM Kills
+      requests:
+        cpu: 1.5
+        memory: 2.5Gi
+    queues:
+      - name: audio_match_frames_fingerprint_tasks
+        priority: 1
+  compare: # Solo Queue to Avoid Sidekiq Concurrency Issues, not tested scaling replicas.
+    replicas: 1
+    sidekiqConcurrency: 1 # Only setting that seemed to work
+    dbPoolSize: 1
+    dbFollowerPoolSize: 1
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 0.5
+        memory: 1Gi
+      requests:
+        cpu: 0.5
+        memory: 1Gi
+    queues:
+      - name: relate_materials
+        priority: 1
+  process:
+    replicas: 2
+    sidekiqConcurrency: 2
+    dbPoolSize: 2
+    dbFollowerPoolSize: 2
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 1.5
+        memory: 2Gi
+      requests:
+        cpu: 1.5
+        memory: 2Gi
+    queues:
+      - name: complete_materials
+        priority: 1
+      - name: compare_materials_results
+        priority: 1
+      - name: audio_insights
+        priority: 1
+      - name: ai_tagging
+        priority: 1
+      - name: video_unique_frames_create_groups_tasks
+        priority: 1
+      - name: video_unique_frames_create_tasks
+        priority: 1
+      - name: video_whole_media_compare_tasks
+        priority: 1
+      - name: process_sbf
+        priority: 1
+      - name: video_match_frames_extract_frames_tasks
+        priority: 1
+      - name: video_match_frames_extract_tasks
+        priority: 1
+      - name: video_match_frames_fingerprint_tasks
+        priority: 1
+      - name: process_frames
+        priority: 1
+      - name: ingest_frames
+        priority: 1
+  generic:
+    replicas: 1 # Runs 'fast' enough with no replicas and high concurrency.
+    sidekiqConcurrency: 10
+    dbPoolSize: 10
+    dbFollowerPoolSize: 10
+    sidekiqTimeout: 600
+    resources:
+      limits:
+        cpu: 300m
+        memory: 500Mi
+      requests:
+        cpu: 300m
+        memory: 500Mi
+    queues:
+      - name: default
+        priority: 1
+      - name: pipeline
+        priority: 2
+      - name: mailers
+        priority: 3
+      - name: active_storage_purge
+        priority: 4

@@ -36,12 +36,22 @@ honeybadger:
   environment: ""  # REQUIRED: Your Honeybadger environment name (provided by Ad-Signal)
 
 owningUser:
+  # You may create a Kubernetes secret with the owning user's credentials.
+  # Set secret.generate: true to auto-generate password (requires Kubernetes cluster access)
+  # Set secret.generate: false to use a pre-created secret
+  # Example: create the secret with kubectl
+  # kubectl create secret generic match-owning-user-credentials \
+  #   --namespace match \
+  #   --from-literal=password="SecurePassword123!"
   email: "admin@example.invalid"
   firstName: "Admin"
   lastName: "User"
   # It's not recommended to set a static password here
   #password: "notsecure"
   organisationName: "Example Org"
+  secret:
+    generate: false  # Set to true to allow Helm to generate the secret (not supported with Argo)
+    name: match-owning-user-credentials # Kubernetes secret containing the owning user's credentials
 
 # Set to true to add ArgoCD sync wave annotations instead of Helm hooks - useful when deploying via ArgoCD
 useArgoSyncWaveAnnotations: false
@@ -76,30 +86,19 @@ log_path: /app/log/production.log
 # Secret Keys configuration
 # Used for Rails session encryption, API authentication, and other cryptographic operations
 secretKeys:
-  apiSecretKeyBase:
-    # Generate a new secret key base automatically (128 random characters)
-    generate: true
-    # If you have an existing secret from a previous install, specify it here
-    # Note: generate and existingSecret are mutually exclusive
-    # existingSecret:
-    #   name: match-existing-api-secret-keys
-    #   key: apiSecretKeyBase
-  secretKeyBase:
-    # Generate a new secret key base automatically (128 random characters)
-    generate: true
-    # If you have an existing secret from a previous install, specify it here
-    # Note: generate and existingSecret are mutually exclusive
-    # existingSecret:
-    #   name: match-existing-secret-keys
-    #   key: secretKeyBase
-  ingestCredentialEncryptionKey:
-    # Generate a new ingest credential encryption key automatically (128 random characters)
-    generate: true
-    # If you have an existing secret from a previous install, specify it here
-    # Note: generate and existingSecret are mutually exclusive
-    # existingSecret:
-    #   name: match-existing-ingest-keys
-    #   key: ingestCredentialEncryptionKey
+  # The application requires three secret keys: apiSecretKeyBase, secretKeyBase, and ingestCredentialEncryptionKey.
+  # These can be provided via a Kubernetes secret.
+  # Set generate: true to auto-generate these keys (requires Kubernetes cluster access)
+  # Set generate: false to use a pre-created secret
+  # If you have an existing secret from a previous install, specify it here:
+  # Example: create the secret with kubectl
+  # kubectl create secret generic match-api-secrets \
+  #   --from-literal=api_secret_key_base=YOUR_API_SECRET_KEY_BASE \
+  #   --from-literal=secret_key_base=YOUR_SECRET_KEY_BASE \
+  #   --from-literal=ingest_credential_encryption_key=YOUR_INGEST_CREDENTIAL_ENCRYPTION_KEY
+  secret:
+    generate: false
+    name: match-api-secrets
 
 storage:
   # This is the shared storage for the application, it is required to be a ReadWriteMany PVC.

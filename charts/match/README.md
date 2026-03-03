@@ -498,6 +498,8 @@ smtp:
 
 If the value `useArgoSyncWaveAnnotations` is set to `true`, the chart will use Argo Sync waves rather than helm hooks to configure ordering of data base migrations, service accounts and storage creation.
 
+> **Important:** Secret generation is not supported when using Argo (`useArgoSyncWaveAnnotations=true`). Argo does not support Helm's `lookup()` function. Please set all secret generation flags to false (`secretKeys.secret.generate: false` and `owningUser.secret.generate: false`) and provide pre-created Kubernetes Secrets.
+
 ---
 
 ## Initial User Configuration

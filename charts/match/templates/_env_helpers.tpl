@@ -49,42 +49,21 @@
   value: "shdbjhsbdfs"
 - name: "RAILS_LOG_TO_STDOUT"
   value: "1"
-{{- if or .Values.secretKeys.apiSecretKeyBase.generate .Values.secretKeys.apiSecretKeyBase.existingSecret }}
 - name: API_SECRET_KEY_BASE
   valueFrom:
     secretKeyRef:
-      {{- if .Values.secretKeys.apiSecretKeyBase.existingSecret }}
-      name: {{ .Values.secretKeys.apiSecretKeyBase.existingSecret.name }}
-      key: {{ .Values.secretKeys.apiSecretKeyBase.existingSecret.key }}
-      {{- else }}
-      name: {{ include "match.fullname" . }}-api-secrets
-      key: apiSecretKeyBase
-      {{- end }}
-{{- end }}
-{{- if or .Values.secretKeys.secretKeyBase.generate .Values.secretKeys.secretKeyBase.existingSecret }}
+      name: {{ .Values.secretKeys.secret.name }}
+      key: api_secret_key_base
 - name: SECRET_KEY_BASE
   valueFrom:
     secretKeyRef:
-      {{- if .Values.secretKeys.secretKeyBase.existingSecret }}
-      name: {{ .Values.secretKeys.secretKeyBase.existingSecret.name }}
-      key: {{ .Values.secretKeys.secretKeyBase.existingSecret.key }}
-      {{- else }}
-      name: {{ include "match.fullname" . }}-api-secrets
-      key: secretKeyBase
-      {{- end }}
-{{- end }}
-{{- if or .Values.secretKeys.ingestCredentialEncryptionKey.generate .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret }}
+      name: {{ .Values.secretKeys.secret.name }}
+      key: secret_key_base
 - name: INGEST_CREDENTIAL_ENCRYPTION_KEY
   valueFrom:
     secretKeyRef:
-      {{- if .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret }}
-      name: {{ .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret.name }}
-      key: {{ .Values.secretKeys.ingestCredentialEncryptionKey.existingSecret.key }}
-      {{- else }}
-      name: {{ include "match.fullname" . }}-api-secrets
-      key: ingestCredentialEncryptionKey
-      {{- end }}
-{{- end }}
+      name: {{ .Values.secretKeys.secret.name }}
+      key: ingest_credential_encryption_key
 - name: S3_PRIMARY_BUCKET
   value: "{{ .Values.s3.primaryBucket | default "adsignal-primary-bucket" }}"
 - name: S3_REGION
@@ -252,7 +231,7 @@
 - name: OWNING_USER_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ include "match.fullname" . }}-owning-user-credentials
+      name: {{ .Values.owningUser.secret.name }}
       key: password
 {{- end }}
 {{- end }}

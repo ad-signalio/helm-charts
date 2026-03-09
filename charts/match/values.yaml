@@ -56,6 +56,28 @@ owningUser:
 # Set to true to add ArgoCD sync wave annotations instead of Helm hooks - useful when deploying via ArgoCD
 useArgoSyncWaveAnnotations: false
 
+kedaAutoScaling:
+  enabled: false
+  # The amount of time in seconds your cluster job pods will be allowed to continue
+  # before being forcefully terminated after receiving a termination signal.
+  # Use this to mitigate voluntary pod disruptions and make job recovery more reliable.
+  # We do NOT recommend running the long running scaledJobs on nodes that are regularly interrupted (e.g. spot instances)
+  # but setting this value correctly will help mitigate disruptions during node maintenance or scaling events.
+  terminationGracePeriodSeconds: 30 # don't set this lower than 30 seconds.
+  redis:
+    pollingInterval: 10 # seconds
+    port: 6379
+    enabledTLS: true
+    databaseIndex: 0
+    authenticationRef:
+      enabled: false # will use .Values.sidekiq.redisServerUrl for hosts if disabled
+      name: keda-trigger-auth-redis
+      # optionally provide host via secret referenced here
+      #secretTargetRef:
+      # - parameter: host
+      #   name: secret-containing-redis-url
+      #   key: endpoint
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: adsignal/match
@@ -77,6 +99,8 @@ dbPrepareJob:
     "helm.sh/hook-delete-policy": "before-hook-creation"
   argoSyncWaveAnnotations:
     argocd.argoproj.io/sync-wave: '-1'
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 
 rails_env: production
 logLevel: info
@@ -126,11 +150,7 @@ storage:
 
 # Any additional file systems that contain content, or secrets required by the application may be mounted here
 # These are mounted on all pods, so PVCs must be ReadOnlyMany
-volumes:
-  - name: tmp-volume
-    emptyDir: {}
-  - name: log-volume
-    emptyDir: {}
+volumes: []
     #- name: content-location
     #  persistentVolumeClaim:
     #    claimName: "content-pvc" # A PVC on the cluster that contains content to be processed by the application.
@@ -192,7 +212,6 @@ securityContext:
       - ALL
   readOnlyRootFilesystem: true
   runAsUser: 65532
-  fsGroup: 65532
 
 metrics:
   enabled: true
@@ -219,6 +238,11 @@ railsConsole:
     limits:
       memory: 1Gi
 
+# Workers: Traditional static Sidekiq worker deployments
+# Only active when kedaAutoScaling.enabled is false
+# Use for traditional deployments with fixed replica counts
+# Each worker can consume multiple Sidekiq queues with configurable concurrency
+# Workers run continuously and process jobs from their assigned queues
 workers:
   generic:
     replicas: 1
@@ -274,6 +298,359 @@ workers:
     queues:
       - name: video_match_frames_native_fingerprint_tasks
         priority: 1
+
+# ScaledObjects: KEDA-managed long-running workers with HorizontalPodAutoscaler-like behavior
+# Only active when kedaAutoScaling.enabled is true
+# Use for multi-queue workers that benefit from dynamic scaling based on queue depth
+# Each worker can consume multiple Sidekiq queues and will scale between min/max replicas
+#
+# NOTE: These are base/default configurations. Environment-specific files in environment-sizes/
+# override ONLY the maxReplicaCount values using Helm's deep merge. All other settings
+# (resources, queues, timeouts, etc.) remain as defined here unless explicitly overridden.
+scaledObjects:
+  generic:
+    minReplicaCount: 1
+    maxReplicaCount: 3
+    sidekiqConcurrency: 10
+    dbPoolSize: 10
+    dbFollowerPoolSize: 10
+    sidekiqTimeout: 30
+    resources:
+      limits:
+        cpu: 300m
+        memory: 500Mi
+      requests:
+        cpu: 300m
+        memory: 500Mi
+    queues:
+      - name: default
+        priority: 1
+      - name: pipeline
+        priority: 2
+      - name: mailers
+        priority: 3
+      - name: active_storage_purge
+        priority: 4
+
+# ScaledJobs: KEDA-managed ephemeral job pods with "one and done" pattern
+# Only active when kedaAutoScaling.enabled is true
+# Use for CPU-intensive or long-running tasks that benefit from dedicated pod-per-job scaling
+# Each scaledJob processes ONE Sidekiq queue only (limitation: cannot handle multiple queues)
+# Jobs are created on-demand when queue has items and terminated after completion
+# Sidekiq concurrency is always 1 per job pod
+#
+# NOTE: These are base/default configurations. Environment-specific files in environment-sizes/
+# override ONLY the maxReplicaCount values using Helm's deep merge. All other settings
+# (resources, queues, timeouts, etc.) remain as defined here unless explicitly overridden.
+scaledJobs:
+  fingerprinter-video:
+    enabled: true
+    maxReplicaCount: 2
+    resources:
+      requests:
+        memory: 0.7Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.7Gi
+    sideKiqQueue: video_match_frames_native_fingerprint_tasks
+    activeDeadlineSeconds: 3600 # 1 hour
+    fingerprinter:
+      resources:
+        requests:
+          cpu: "4.5"
+          memory: 2Gi
+        limits:
+          cpu: "4.5"
+          memory: 2Gi
+  fingerprinter-audio:
+    enabled: true
+    maxReplicaCount: 2
+    resources:
+      requests:
+        memory: 0.7Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.7Gi
+    sideKiqQueue: native_audio_processing_tasks
+    activeDeadlineSeconds: 3600 # 1 hour
+    fingerprinter:
+      resources:
+        requests:
+          cpu: "4.5"
+          memory: 2Gi
+        limits:
+          cpu: "4.5"
+          memory: 2Gi
+  # Ingest worker queues converted to scaledJobs (CPU halved from 1 to 0.5 due to concurrency 2->1)
+  ingest-proxy-generate:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 0.8Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.8Gi
+    sideKiqQueue: proxy_generate_tasks
+    activeDeadlineSeconds: 600
+  ingest-attach-image:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 0.8Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.8Gi
+    sideKiqQueue: video_match_frames_attach_image_tasks
+    activeDeadlineSeconds: 600
+  ingest-process-materials:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 0.8Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.8Gi
+    sideKiqQueue: process_materials
+    activeDeadlineSeconds: 600
+  ingest-materials:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 0.8Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.8Gi
+    sideKiqQueue: ingest_materials
+    activeDeadlineSeconds: 600
+  ingest-process-qc:
+    enabled: true
+    maxReplicaCount: 2
+    resources:
+      requests:
+        memory: 0.8Gi
+        cpu: "2.0"
+      limits:
+        cpu: "4.0"
+        memory: 3Gi
+    sideKiqQueue: process_qc
+    activeDeadlineSeconds: 600
+  ingest-process-media:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 0.8Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.8Gi
+    sideKiqQueue: process_media
+    activeDeadlineSeconds: 600
+  ingest-download-media:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 0.8Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 0.8Gi
+    sideKiqQueue: download_media
+    activeDeadlineSeconds: 600
+  # Audiomatchfingerprint worker queue converted to scaledJob (concurrency 1, resources unchanged)
+  audiomatch-fingerprint:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2.5Gi
+        cpu: "1.5"
+      limits:
+        cpu: "1.5"
+        memory: 2.5Gi
+    sideKiqQueue: audio_match_frames_fingerprint_tasks
+    activeDeadlineSeconds: 600
+  # Compare worker queue converted to scaledJob (concurrency 1, resources unchanged)
+  compare-relate:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: "0.5"
+      limits:
+        cpu: "0.5"
+        memory: 1Gi
+    sideKiqQueue: relate_materials
+    activeDeadlineSeconds: 600
+  # Process worker queues converted to scaledJobs (CPU halved from 1.5 to 0.75 due to concurrency 2->1)
+  process-complete-materials:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: complete_materials
+    activeDeadlineSeconds: 600
+  process-compare-results:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: compare_materials_results
+    activeDeadlineSeconds: 600
+  process-audio-insights:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: audio_insights
+    activeDeadlineSeconds: 600
+  process-ai-tagging:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: ai_tagging
+    activeDeadlineSeconds: 600
+  process-unique-frames-groups:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: video_unique_frames_create_groups_tasks
+    activeDeadlineSeconds: 600
+  process-unique-frames-create:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: video_unique_frames_create_tasks
+    activeDeadlineSeconds: 600
+  process-whole-media-compare:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: video_whole_media_compare_tasks
+    activeDeadlineSeconds: 600
+  process-sbf:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: process_sbf
+    activeDeadlineSeconds: 600
+  process-extract-frames:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "3"
+      limits:
+        cpu: "3"
+        memory: 2Gi
+    sideKiqQueue: video_match_frames_extract_frames_tasks
+    activeDeadlineSeconds: 600
+  process-extract:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "2"
+        memory: 2Gi
+    sideKiqQueue: video_match_frames_extract_tasks
+    activeDeadlineSeconds: 600
+  process-video-fingerprint:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: video_match_frames_fingerprint_tasks
+    activeDeadlineSeconds: 600
+  process-frames:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: process_frames
+    activeDeadlineSeconds: 600
+  process-ingest-frames:
+    enabled: true
+    maxReplicaCount: 5
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: "0.75"
+      limits:
+        cpu: "0.75"
+        memory: 2Gi
+    sideKiqQueue: ingest_frames
+    activeDeadlineSeconds: 600
 
 service:
   type: ClusterIP

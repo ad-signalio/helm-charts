@@ -39,7 +39,7 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["/bin/bash", "-c", "rm -f /app/tmp/pids/server.pid && bin/rails server -b 0.0.0.0 -p {{ .Values.webServers.port }}"]
+          args: ["/bin/bash", "-c", "rm -f /tmp/pids/server.pid && bin/rails server -b 0.0.0.0 -p {{ .Values.webServers.port }}"]
           ports:
             - name: http
               containerPort: {{ .Values.webServers.port }}
@@ -51,11 +51,11 @@ spec:
             {{- end }}
           livenessProbe:
             httpGet:
-              path: /
+              path: /up
               port: http
           readinessProbe:
             httpGet:
-              path: /
+              path: /up
               port: http
           {{- with .Values.webServers.resources }}
           resources:

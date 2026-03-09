@@ -9,25 +9,95 @@
 #   cpu                14370m (90%)           14950m (94%)
 #   memory             17116115763200m (60%)  22933615411200m (81%)
 ####
+# Environment-Specific Scaling Overrides (Small - 1x baseline)
+#
+# This file overrides ONLY the maxReplicaCount for each scaledJob and scaledObject.
+# All other configuration (resources, queues, timeouts, fingerprinter sidecars, etc.)
+# is defined in values.yaml and inherited via Helm's deep merge.
+#
+# Helm deep merges these values with values.yaml when you use multiple -f flags:
+#   helm install ... --values values.yaml -f environment-sizes/small/small.yaml
+#
+# Only the specific fields defined here (maxReplicaCount) override the base values.
+# All other fields from values.yaml are preserved.
+#
+# Sizing multipliers across environments:
+# - small.yaml: 1x (baseline - these values)
+# - medium.yaml: 2x (double these maxReplicaCount values)
+# - large.yaml: 3x (triple these maxReplicaCount values)
+####
+scaledObjects:
+  generic:
+    maxReplicaCount: 3
+
+scaledJobs:
+  fingerprinter-video:
+    maxReplicaCount: 2
+  fingerprinter-audio:
+    maxReplicaCount: 2
+  ingest-proxy-generate:
+    maxReplicaCount: 5
+  ingest-attach-image:
+    maxReplicaCount: 5
+  ingest-process-materials:
+    maxReplicaCount: 5
+  ingest-materials:
+    maxReplicaCount: 5
+  ingest-process-qc:
+    maxReplicaCount: 2
+  ingest-process-media:
+    maxReplicaCount: 5
+  ingest-download-media:
+    maxReplicaCount: 5
+  audiomatch-fingerprint:
+    maxReplicaCount: 5
+  compare-relate:
+    maxReplicaCount: 5
+  process-complete-materials:
+    maxReplicaCount: 5
+  process-compare-results:
+    maxReplicaCount: 5
+  process-audio-insights:
+    maxReplicaCount: 5
+  process-ai-tagging:
+    maxReplicaCount: 5
+  process-unique-frames-groups:
+    maxReplicaCount: 5
+  process-unique-frames-create:
+    maxReplicaCount: 5
+  process-whole-media-compare:
+    maxReplicaCount: 5
+  process-sbf:
+    maxReplicaCount: 5
+  process-extract-frames:
+    maxReplicaCount: 5
+  process-extract:
+    maxReplicaCount: 5
+  process-video-fingerprint:
+    maxReplicaCount: 5
+  process-frames:
+    maxReplicaCount: 5
+  process-ingest-frames:
+    maxReplicaCount: 5
 workers:
   fingerprinter:
     replicas: 1
     fingerprinter:
-      enabled: true
+      enabled: false
       port: 6000
       resource: # Nested 'resource' block for fingerprinter image resource requests/limits
         limits:
-          cpu: 4.5
+          cpu: "4.5"
           memory: 2Gi
         requests:
-          cpu: 4.5
+          cpu: "4.5"
           memory: 2Gi
     resources:
       requests:
-        cpu: 0.4
+        cpu: "0.4"
         memory: 0.7Gi # SideKiq extremeley light here.
       limits:
-        cpu: 0.5
+        cpu: "0.5"
         memory: 0.7Gi
     dbPoolSize: 1
     dbFollowerPoolSize: 1
@@ -46,10 +116,10 @@ workers:
     sidekiqTimeout: 600
     resources:
       limits:
-        cpu: 1
+        cpu: "1"
         memory: 0.8Gi
       requests:
-        cpu: 1
+        cpu: "1"
         memory: 0.8Gi
     queues:
       - name: proxy_generate_tasks
@@ -74,10 +144,10 @@ workers:
     sidekiqTimeout: 600
     resources:
       limits:
-        cpu: 1.5
+        cpu: "1.5"
         memory: 2.5Gi # Safe from OOM Kills
       requests:
-        cpu: 1.5
+        cpu: "1.5"
         memory: 2.5Gi
     queues:
       - name: audio_match_frames_fingerprint_tasks
@@ -90,10 +160,10 @@ workers:
     sidekiqTimeout: 600
     resources:
       limits:
-        cpu: 0.5
+        cpu: "0.5"
         memory: 1Gi
       requests:
-        cpu: 0.5
+        cpu: "0.5"
         memory: 1Gi
     queues:
       - name: relate_materials
@@ -106,10 +176,10 @@ workers:
     sidekiqTimeout: 600
     resources:
       limits:
-        cpu: 1.5
+        cpu: "1.5"
         memory: 2Gi
       requests:
-        cpu: 1.5
+        cpu: "1.5"
         memory: 2Gi
     queues:
       - name: complete_materials

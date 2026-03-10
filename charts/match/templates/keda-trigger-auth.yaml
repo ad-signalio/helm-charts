@@ -1,0 +1,12 @@
+{{- if .Values.kedaAutoScaling.redis.authenticationRef.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ .Values.kedaAutoScaling.redis.authenticationRef.name }}
+spec:
+    {{- with .Values.kedaAutoScaling.redis.authenticationRef.secretTargetRef }}
+    secretTargetRef:
+        {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

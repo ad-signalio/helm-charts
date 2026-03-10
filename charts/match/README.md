@@ -9,7 +9,7 @@ for AWS [here](https://github.com/ad-signalio/match-reference-architecture)
 
 ## Requirements
 
-A Kubernetes cluster with the following facilities:
+A Kubernetes cluster (1.32+ for KEDA based autoscaling) with the following facilities:
 
 ### ReadWriteMany PVC Location
 
@@ -162,6 +162,175 @@ Optionally the chart can install a Redis database on your Kubernetes cluster usi
 redis:
   enabled: true
 ```
+
+## KEDA Autoscaling
+
+Match supports [KEDA (Kubernetes Event Driven Autoscaling)](https://keda.sh/) to dynamically scale Sidekiq workers based on Redis queue depth. This provides cost-effective scaling by creating pods on-demand when work is available and scaling to zero when queues are empty.
+
+### Prerequisites
+
+**KEDA Installation Required**
+
+KEDA must be installed on your Kubernetes cluster before enabling autoscaling. Match supports KEDA v2.x.
+
+Install KEDA using Helm:
+
+```bash
+helm repo add kedacore https://kedacore.github.io/charts
+helm repo update
+helm install keda kedacore/keda --namespace keda --create-namespace
+```
+
+Or follow the [KEDA installation documentation](https://keda.sh/docs/latest/deploy/).
+
+**Kubernetes Version**
+
+- Kubernetes 1.32+ is required as Match needs sidecar Job support.
+
+### Enabling KEDA Autoscaling
+
+Enable KEDA-based autoscaling in your values:
+
+```yaml
+kedaAutoScaling:
+  enabled: true
+  terminationGracePeriodSeconds: 30
+  redis:
+    pollingInterval: 10  # Check queue depth every 10 seconds
+    port: 6379
+    enabledTLS: true
+    databaseIndex: 0
+```
+
+When `kedaAutoScaling.enabled` is `true`:
+- **scaledJobs** and **scaledObjects** configurations are active
+- **workers** (traditional static deployments) are disabled
+
+When `kedaAutoScaling.enabled` is `false`:
+- **workers** configurations are active
+- **scaledJobs** and **scaledObjects** are disabled
+
+### Redis Connection Configuration
+
+KEDA needs to connect to your Redis instance to monitor queue depths. There are two methods:
+
+#### Method 1: Direct Connection (Simple)
+
+Use the existing Sidekiq Redis URL for KEDA triggers:
+
+```yaml
+kedaAutoScaling:
+  enabled: true
+  redis:
+    authenticationRef:
+      enabled: false  # Disables TriggerAuthentication, uses direct URL
+
+sidekiq:
+  redisServerUrl: rediss://redis.external-domain.tld:6379/
+```
+
+KEDA will extract the host from `sidekiq.redisServerUrl` for monitoring.
+
+#### Method 2: KEDA TriggerAuthentication (Recommended for Production)
+
+For better security and separation of concerns, use KEDA's TriggerAuthentication resource:
+
+```yaml
+kedaAutoScaling:
+  enabled: true
+  redis:
+    authenticationRef:
+      enabled: true
+      name: keda-trigger-auth-redis
+```
+
+Create a secret containing Redis credentials:
+
+```bash
+kubectl create secret generic keda-redis-secret \
+  --namespace match \
+  --from-literal=host=redis.external-domain.tld \
+  --from-literal=password=your-redis-password
+```
+
+Then create a TriggerAuthentication resource:
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-trigger-auth-redis
+  namespace: match
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: keda-redis-secret
+      key: host
+    - parameter: password
+      name: keda-redis-secret
+      key: password
+```
+
+This approach keeps Redis credentials separate and allows different authentication for KEDA vs. application access.
+
+### Worker Types
+
+Match provides two types of autoscaled workers:
+
+**ScaledJobs (One-and-Done Pattern)**
+- Best for CPU-intensive, long-running, or variable-duration tasks (e.g., video fingerprinting, transcoding)
+- Creates ephemeral pods that process exactly one job then terminate
+- Processes ONE Sidekiq queue per scaledJob
+- Scales from 0 to maxReplicaCount based on queue depth
+
+**ScaledObjects (HPA-like Pattern)**
+- Best for lightweight, fast-processing tasks with multiple related queues
+- Long-running worker deployments that scale similar to HorizontalPodAutoscaler
+- Can process MULTIPLE Sidekiq queues per worker with configurable concurrency
+- Scales between minReplicaCount and maxReplicaCount based on aggregate queue depth
+
+Initial autoscaling configurations for different deployment sizes can be found in the `environment-sizes/` directory (e.g., `environment-sizes/small/small.yaml`).
+
+### Values File Merging
+
+This chart uses **Helm's deep merge** feature to combine multiple values files. When you deploy with multiple `-f` flags:
+
+```bash
+helm install ... --values your-custom-values.yaml -f environment-sizes/small/small.yaml
+```
+
+Helm merges the values files from left to right, where each file can override specific fields from previous files. The key behavior:
+
+- **Deep merge for objects/maps**: Only the specific fields you define in later files are overridden; all other fields are preserved
+- **Complete replacement for arrays**: Lists are replaced entirely, not merged
+
+**Example**: The base `values.yaml` defines complete scaledJob configurations including resources, queues, timeouts, and `maxReplicaCount`. Environment-specific files (like `environment-sizes/small/small.yaml`) override **only** the `maxReplicaCount` field:
+
+```yaml
+# values.yaml (base configuration)
+scaledJobs:
+  fingerprinter-video:
+    enabled: true
+    maxReplicaCount: 2
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: 0.7Gi
+    sideKiqQueue: video_match_frames_native_fingerprint_tasks
+    activeDeadlineSeconds: 3600
+
+# environment-sizes/medium/medium.yaml (override)
+scaledJobs:
+  fingerprinter-video:
+    maxReplicaCount: 4  # Override only this field
+
+# Result after merge: maxReplicaCount is 4, all other fields preserved from values.yaml
+```
+
+This allows environment-specific files to adjust scaling limits without duplicating resource allocations, queue configurations, or other settings. The sizing multipliers are:
+- **small.yaml**: 1x baseline (matches `values.yaml` defaults)
+- **medium.yaml**: 2x baseline
+- **large.yaml**: 3x baseline
 
 ## Image Pull Secrets
 
@@ -725,6 +894,8 @@ helm install ad-signal/adsignal-match  \
   --create-namespace \
   --values your-custom-values.yaml -f environment-sizes/{SIZE}.yaml
 ```
+
+> **Note**: The multiple `-f` flags apply values files in order using Helm's deep merge. The environment size file (e.g., `environment-sizes/small/small.yaml`) overrides only the `maxReplicaCount` scaling limits from `values.yaml`. All other configurations (resources, queues, timeouts) are preserved from the base values. See [Values File Merging](#values-file-merging) for details.
 
 
 

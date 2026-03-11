@@ -389,11 +389,11 @@ scaledJobs:
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 0.8Gi
-        cpu: "0.5"
+        memory: 1Gi
+        cpu: "2"
       limits:
-        cpu: "0.5"
-        memory: 0.8Gi
+        cpu: "4"
+        memory: 2Gi
     sideKiqQueue: proxy_generate_tasks
     activeDeadlineSeconds: 600
   ingest-attach-image:
@@ -791,3 +791,7 @@ monitoring:
 # loki-stack:
 #   loki:
 #     enabled: false
+
+
+materialProcessingPipelines: "default|duration>=0"
+materialProcessingCount: "default=5"

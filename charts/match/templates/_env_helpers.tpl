@@ -181,6 +181,10 @@
       name: {{ .Values.smtp.secret.name }}
       key: MAILER_DEFAULT_FROM
 {{- end }}
+- name: MATERIAL_PROCESSING_PIPELINES
+  value: "{{ .Values.materialProcessingPipelines }}"
+- name: MATERIAL_PROCESSING_COUNT
+  value: "{{ .Values.materialProcessingCount }}"
 {{- if .Values.honeybadger }}
 - name: HONEYBADGER_API_KEY
   valueFrom:

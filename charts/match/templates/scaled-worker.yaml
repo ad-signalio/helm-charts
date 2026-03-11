@@ -1,16 +1,45 @@
-{{ if not .Values.kedaAutoScaling.enabled }}
-{{- range $name, $worker := .Values.workers }}
+{{ if .Values.kedaAutoScaling.enabled }}
+{{ range $name, $worker := .Values.scaledObjects }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ $name }}-worker-{{ include "match.fullname" $ }}
+spec:
+  scaleTargetRef:
+    name: {{ $name }}-worker-{{ include "match.fullname" $ }}
+  minReplicaCount: {{ $worker.minReplicaCount | default 0 }}
+  maxReplicaCount: {{ $worker.maxReplicaCount }}
+  pollingInterval:  {{ $worker.pollingInterval | default $.Values.kedaAutoScaling.redis.pollingInterval | default 10 }}
+  cooldownPeriod: {{ $worker.cooldownPeriod | default 300 }}
+  triggers:
+    {{- range $queue := $worker.queues }}
+    - type: redis
+      metadata:
+        # Assumes standard SideKiq namespacing "queue:<name>"
+        listName: "queue:{{ $queue.name }}"
+        listLength: "1"
+        databaseIndex: "{{ $.Values.kedaAutoScaling.redis.databaseIndex }}"
+        enableTLS: "{{ $.Values.kedaAutoScaling.redis.enabledTLS }}"
+        port: "{{ $.Values.kedaAutoScaling.redis.port }}"
+      {{- if not $.Values.kedaAutoScaling.redis.authenticationRef.enabled }}
+        address: {{ $.Values.sidekiq.redisServerUrl }}
+      {{- else }}
+      authenticationRef:
+        name: {{ $.Values.kedaAutoScaling.redis.authenticationRef.name }}
+      {{- end }}
+    {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $name }}-{{ include "match.fullname" $ }}
+  name: {{ $name }}-worker-{{ include "match.fullname" $ }}
   labels:
     {{- include "match.labels" $ | nindent 4 }}
 spec:
   strategy:
     type: {{ $.Values.workerDeploymentStrategy | default "RollingUpdate" }}
-  replicas: {{ $worker.replicas }}
+  replicas: 1  # Managed by KEDA ScaledObject
   selector:
     matchLabels:
       {{- include "match.selectorLabels" $ | nindent 6 }}
@@ -61,10 +90,10 @@ spec:
             - "{{ $worker.sidekiqConcurrency }}"
             {{- range $queue := $worker.queues }}
             - "-q"
-            - "{{ $queue.name }},{{ $queue.priority -}}"
+            - "{{ $queue.name }},{{ $queue.priority }}"
             {{- end }}
             - "-t"
-            - "{{$worker.sidekiqTimeout}}"
+            - "{{ $worker.sidekiqTimeout }}"
           image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
@@ -87,7 +116,7 @@ spec:
           image: "{{ $.Values.fingerprinter.image.repository }}:{{ $.Values.fingerprinter.image.tag }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           command: [ "adsignal-stream-fp" ]
-          args: [ "server", "-p", {{.port | default 6000 | quote}} ]
+          args: [ "server", "-p", {{ .port | default 6000 | quote }} ]
           resources:
             {{- toYaml .resource | nindent 12 }}
           volumeMounts:
@@ -107,4 +136,5 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }}{{- end }}
+{{- end }}
+{{- end }}

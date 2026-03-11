@@ -3,6 +3,9 @@ kind: Job
 metadata:
   name: rails-prepare-job-{{ .Release.Revision }}
   namespace: match
+  labels:
+    {{- include "match.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-prepare
   annotations:
     {{- with .Values.dbPrepareJob.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -14,6 +17,10 @@ metadata:
     {{- end }}
 spec:
   template:
+    metadata:
+      labels:
+        {{- include "match.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: db-prepare
     spec:
       serviceAccountName: {{ include "match.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}

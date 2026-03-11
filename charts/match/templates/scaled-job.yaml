@@ -1,0 +1,158 @@
+# OneAndDone
+{{- if .Values.kedaAutoScaling.enabled }}
+{{- range $name, $job := .Values.scaledJobs }}
+{{- if $job.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: {{ $name }}-{{ include "match.fullname" $ }}
+spec:
+  jobTargetRef:
+    {{- if $job.activeDeadlineSeconds }}
+    activeDeadlineSeconds: {{ $job.activeDeadlineSeconds }}
+    {{- end }}
+    # we just leave it up to KEDA to launch a new pod if if still finds jobs on the queue
+    backoffLimit: 0
+    template:
+      metadata:
+        labels:
+          app.ad-signal.io/type: "job"
+          app.ad-signal.io/job-name: {{ $name }}
+          {{- include "match.labels" $ | nindent 10 }}
+        annotations:
+          # Ask karpenter to not voluntarily disrupt this pod
+          # involuntary disruptions, such as SPOT instance replacements are still possible.
+          karpenter.sh/do-not-disrupt: "true"
+      spec:
+        terminationGracePeriodSeconds: {{ $.Values.kedaAutoScaling.terminationGracePeriod }}
+        serviceAccountName: {{ include "match.serviceAccountName" $ }}
+        restartPolicy: Never
+        {{- with $job.affinity }}
+        affinity:
+          nodeAffinity:
+          {{- toYaml $job.affinity.nodeAffinity | nindent 12 }}
+        {{- end }}
+        {{- with $job.tolerations }}
+        tolerations:
+          {{- toYaml $job.tolerations | nindent 10 }}
+        {{- end }}
+        {{- with $.Values.imagePullSecrets }}
+        imagePullSecrets:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if $job.fingerprinter }}
+        initContainers:
+          # Match only supports rust fingerprinter.
+          - name: fingerprinter
+            # makes the init container into sidecar that runs for the lifetime of the job pod, not just during init
+            restartPolicy: Always
+            image: {{ $.Values.fingerprinter.image.repository }}:{{ $.Values.fingerprinter.image.tag }}
+            imagePullPolicy: {{ $.Values.image.pullPolicy }}
+            command:
+              - "adsignal-stream-fp"
+            args:
+              - "server"
+              - "-p"
+              - {{ $job.fingerprinter.port | default 6000 | quote }}
+            resources:
+              {{- toYaml $job.fingerprinter.resources | nindent 14 }}
+            env:
+              {{- include "match.envVars" $ | nindent 14 }}
+            volumeMounts:
+              {{- include "match.volumeMounts" $ | nindent 14 }}
+            {{- with $.Values.securityContext }}
+            securityContext:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+        {{- end }}
+        containers:
+          - name: sidekiq-job
+            image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+            imagePullPolicy: {{ $.Values.image.pullPolicy }}
+            args:
+              - /usr/local/bin/bundle
+              - exec
+              - sidekiq
+              - "-t"
+              - "{{ sub $.Values.kedaAutoScaling.terminationGracePeriodSeconds 5 }}"
+              - "-c"
+              - "1"
+              - "-q"
+              - "{{ $job.sideKiqQueue }},1"
+            lifecycle:
+              preStop:
+                exec:
+                  command:
+                    - "/prestop.sh"
+            livenessProbe:
+              exec:
+                command:
+                  - cat
+                  - /tmp/liveness
+              initialDelaySeconds: 60
+              periodSeconds: 10
+            volumeMounts:
+              {{- include "match.volumeMounts" $ | nindent 14 }}
+              {{- if $job.preStopProcToKill }}
+              - name: prestop-kill-script
+                mountPath: "/prestop.sh"
+                subPath: prestop.sh
+                readOnly: true
+              {{- end }}
+            env:
+              {{- include "match.envVars" $ | nindent 14 }}
+              {{- if $job.fingerprinter }}
+              - name: FINGERPRINTING_SERVICE_URL
+                value: "127.0.0.1:6000"
+              {{- end }}
+              {{- if $job.preStopProcToKill }}
+              - name: PRESTOP_PROC_TO_KILL
+                value: "{{ $job.preStopProcToKill }}"
+              {{- end }}
+              - name: SIDEKIQ_ONE_AND_DONE
+                value: "true"
+            ports:
+              - name: metrics
+                containerPort: {{ $.Values.metrics.metricsPort }}
+            {{- with $job.resources }}
+            resources:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+        volumes:
+          {{- include "match.volumes" $ | nindent 10 }}
+          {{- if $job.preStopProcToKill }}
+          - name: prestop-kill-script
+            configMap:
+              name: prestop-kill-script
+              defaultMode: 0555
+          {{- end }}
+  successfulJobsHistoryLimit: 15
+  failedJobsHistoryLimit: 5
+  rollout:
+    # Don't terminate existing running jobs when ScaledObject is updated
+    strategy: gradual
+  scalingStrategy:
+    strategy: "accurate"
+    pendingPodConditions:
+      - "Ready"
+      - "PodScheduled"
+  maxReplicaCount:  {{ $job.maxReplicaCount }}
+  pollingInterval:  {{ $.Values.kedaAutoScaling.redis.pollingInterval | default 10 }}
+  triggers:
+    - type: redis
+      metadata:
+        listName: "queue:{{ $job.sideKiqQueue }}"
+        listLength: "1"
+        databaseIndex: "{{ $.Values.kedaAutoScaling.redis.databaseIndex }}"
+        enableTLS: "{{ $.Values.kedaAutoScaling.redis.enabledTLS }}"
+        port: "{{ $.Values.kedaAutoScaling.redis.port }}"
+      {{- if not $.Values.kedaAutoScaling.redis.authenticationRef.enabled }}
+        address: {{ $.Values.sidekiq.redisServerUrl }}
+      {{- else }}
+      authenticationRef:
+        name: {{ $.Values.kedaAutoScaling.redis.authenticationRef.name }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

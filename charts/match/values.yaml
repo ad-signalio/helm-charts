@@ -99,8 +99,8 @@ dbPrepareJob:
     "helm.sh/hook-delete-policy": "before-hook-creation"
   argoSyncWaveAnnotations:
     argocd.argoproj.io/sync-wave: '-1'
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+
 
 rails_env: production
 logLevel: info
@@ -368,11 +368,11 @@ scaledJobs:
     maxReplicaCount: 2
     resources:
       requests:
-        memory: 0.7Gi
-        cpu: "0.5"
+        cpu: "1500m"
+        memory: 2.5Gi
       limits:
-        cpu: "0.5"
-        memory: 0.7Gi
+        cpu: "1500m"
+        memory: 2.5Gi # Safe from OOM Kills
     sideKiqQueue: native_audio_processing_tasks
     activeDeadlineSeconds: 3600 # 1 hour
     fingerprinter:
@@ -474,11 +474,11 @@ scaledJobs:
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 2.5Gi
+        memory: 4Gi
         cpu: "1.5"
       limits:
         cpu: "1.5"
-        memory: 2.5Gi
+        memory: 4Gi
     sideKiqQueue: audio_match_frames_fingerprint_tasks
     activeDeadlineSeconds: 600
   # Compare worker queue converted to scaledJob (concurrency 1, resources unchanged)

@@ -99,8 +99,8 @@ dbPrepareJob:
     "helm.sh/hook-delete-policy": "before-hook-creation"
   argoSyncWaveAnnotations:
     argocd.argoproj.io/sync-wave: '-1'
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+
 
 rails_env: production
 logLevel: info
@@ -318,10 +318,10 @@ scaledObjects:
     resources:
       limits:
         cpu: 300m
-        memory: 500Mi
+        memory: 1500Mi
       requests:
         cpu: 300m
-        memory: 500Mi
+        memory: 300Mi
     queues:
       - name: default
         priority: 1
@@ -331,6 +331,8 @@ scaledObjects:
         priority: 3
       - name: active_storage_purge
         priority: 4
+      - name: refresh_ingest_source_reports
+        priority: 5
 
 # ScaledJobs: KEDA-managed ephemeral job pods with "one and done" pattern
 # Only active when kedaAutoScaling.enabled is true
@@ -348,31 +350,31 @@ scaledJobs:
     maxReplicaCount: 2
     resources:
       requests:
-        memory: 0.7Gi
-        cpu: "0.5"
+        memory: 650Mi
+        cpu: "200m"
       limits:
-        cpu: "0.5"
-        memory: 0.7Gi
+        cpu: "500m"
+        memory: 2Gi
     sideKiqQueue: video_match_frames_native_fingerprint_tasks
     activeDeadlineSeconds: 3600 # 1 hour
     fingerprinter:
       resources:
         requests:
           cpu: "4.5"
-          memory: 2Gi
+          memory: 512Mi
         limits:
           cpu: "4.5"
-          memory: 2Gi
+          memory: 1.5Gi
   fingerprinter-audio:
     enabled: true
     maxReplicaCount: 2
     resources:
       requests:
-        memory: 0.7Gi
-        cpu: "0.5"
+        cpu: "1500m"
+        memory: 2.5Gi
       limits:
-        cpu: "0.5"
-        memory: 0.7Gi
+        cpu: "1500m"
+        memory: 2.5Gi # Safe from OOM Kills
     sideKiqQueue: native_audio_processing_tasks
     activeDeadlineSeconds: 3600 # 1 hour
     fingerprinter:
@@ -395,7 +397,7 @@ scaledJobs:
         cpu: "4"
         memory: 2Gi
     sideKiqQueue: proxy_generate_tasks
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 5400 # set to 90mins
   ingest-attach-image:
     enabled: true
     maxReplicaCount: 5
@@ -474,13 +476,13 @@ scaledJobs:
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 2.5Gi
+        memory: 6Gi
         cpu: "1.5"
       limits:
         cpu: "1.5"
-        memory: 2.5Gi
+        memory: 6Gi
     sideKiqQueue: audio_match_frames_fingerprint_tasks
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 5400 # set to 90mins
   # Compare worker queue converted to scaledJob (concurrency 1, resources unchanged)
   compare-relate:
     enabled: true
@@ -596,13 +598,13 @@ scaledJobs:
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 2Gi
-        cpu: "3"
+        memory: 512Mi
+        cpu: "1"
       limits:
         cpu: "3"
-        memory: 2Gi
+        memory: 1500Mi
     sideKiqQueue: video_match_frames_extract_frames_tasks
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 5400
   process-extract:
     enabled: true
     maxReplicaCount: 5

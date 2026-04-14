@@ -59,6 +59,14 @@ spec:
               {{- toYaml $job.fingerprinter.resources | nindent 14 }}
             env:
               {{- include "match.envVars" $ | nindent 14 }}
+              {{- if $.Values.fingerPrinterDebug }}
+              - name: RUST_LOG
+                value: "debug"
+              - name: GST_DEBUG
+                value: "*:5"
+              - name: GST_DEBUG_NO_COLOR
+                value: "1"
+              {{- end }}
             volumeMounts:
               {{- include "match.volumeMounts" $ | nindent 14 }}
             {{- with $.Values.securityContext }}

@@ -39,13 +39,15 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["/bin/bash", "-c", "rm -f /tmp/pids/server.pid && bin/rails server -b 0.0.0.0 -p {{ .Values.webServers.port }}"]
+          args: ["/bin/bash", "-c", "rm -f /app/tmp/pids/server.pid && bin/rails server -b 0.0.0.0 -p {{ .Values.webServers.port }}"]
           ports:
             - name: http
               containerPort: {{ .Values.webServers.port }}
               protocol: TCP
           env:
             {{- include "match.envVars" . | nindent 12 }}
+            - name: WEB_CONCURRENCY
+              value: {{ .Values.webServers.webConcurrency | default 0 | quote }}
             {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -53,10 +55,12 @@ spec:
             httpGet:
               path: /up
               port: http
+            timeoutSeconds: {{ .Values.webServers.livenessProbe.timeoutSeconds | default 1 }}
           readinessProbe:
             httpGet:
               path: /up
               port: http
+            timeoutSeconds: {{ .Values.webServers.readinessProbe.timeoutSeconds | default 1 }}
           {{- with .Values.webServers.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

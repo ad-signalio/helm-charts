@@ -91,6 +91,11 @@ fingerprinter:
     repository: adsignal/stream-fp
     tag: "x86_64-linux-sha-ef4ee63"
 
+# Enable verbose debug logging on the fingerprinter sidecar (Rust + GStreamer).
+# Sets RUST_LOG=debug and GST_DEBUG=*:5 on the fingerprinter init container.
+# Do not leave enabled in production — log volume is very high.
+fingerPrinterDebug: false
+
 dbPrepareJob:
   annotations: {}
   helmHookAnnotations:
@@ -99,8 +104,8 @@ dbPrepareJob:
     "helm.sh/hook-delete-policy": "before-hook-creation"
   argoSyncWaveAnnotations:
     argocd.argoproj.io/sync-wave: '-1'
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+
 
 rails_env: production
 logLevel: info
@@ -221,12 +226,18 @@ metrics:
 webServers:
   port: 3000
   replicas: 1
+  livenessProbe:
+    timeoutSeconds: 5
+  readinessProbe:
+    timeoutSeconds: 5
+  # Sets RAILS_MAX_THREADS — controls Puma thread count and ActiveRecord connection pool size.
+  railsMaxThreads: 15
   resources:
     requests:
-      cpu: 50m
+      cpu: 1
       memory: 1Gi
     limits:
-      memory: 1Gi
+      memory: 1.5Gi
 
 railsConsole:
   enabled: false
@@ -318,10 +329,10 @@ scaledObjects:
     resources:
       limits:
         cpu: 300m
-        memory: 500Mi
+        memory: 1500Mi
       requests:
         cpu: 300m
-        memory: 500Mi
+        memory: 300Mi
     queues:
       - name: default
         priority: 1
@@ -331,6 +342,8 @@ scaledObjects:
         priority: 3
       - name: active_storage_purge
         priority: 4
+      - name: refresh_ingest_source_reports
+        priority: 5
 
 # ScaledJobs: KEDA-managed ephemeral job pods with "one and done" pattern
 # Only active when kedaAutoScaling.enabled is true
@@ -348,31 +361,31 @@ scaledJobs:
     maxReplicaCount: 2
     resources:
       requests:
-        memory: 0.7Gi
-        cpu: "0.5"
+        memory: 850Mi
+        cpu: "200m"
       limits:
-        cpu: "0.5"
-        memory: 0.7Gi
+        cpu: "500m"
+        memory: 2Gi
     sideKiqQueue: video_match_frames_native_fingerprint_tasks
-    activeDeadlineSeconds: 3600 # 1 hour
+    activeDeadlineSeconds: 14400 # 4 hours
     fingerprinter:
       resources:
         requests:
-          cpu: "4.5"
+          cpu: "3.5"
           memory: 2Gi
         limits:
-          cpu: "4.5"
-          memory: 2Gi
+          cpu: "5"
+          memory: 4Gi
   fingerprinter-audio:
     enabled: true
     maxReplicaCount: 2
     resources:
       requests:
-        memory: 0.7Gi
-        cpu: "0.5"
+        cpu: "1500m"
+        memory: 2.5Gi
       limits:
-        cpu: "0.5"
-        memory: 0.7Gi
+        cpu: "1500m"
+        memory: 2.5Gi # Safe from OOM Kills
     sideKiqQueue: native_audio_processing_tasks
     activeDeadlineSeconds: 3600 # 1 hour
     fingerprinter:
@@ -389,13 +402,13 @@ scaledJobs:
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 1Gi
+        memory: 1.25Gi
         cpu: "2"
       limits:
-        cpu: "4"
-        memory: 2Gi
+        cpu: "6"
+        memory: 4Gi
     sideKiqQueue: proxy_generate_tasks
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 5400 # set to 90mins
   ingest-attach-image:
     enabled: true
     maxReplicaCount: 5
@@ -443,7 +456,7 @@ scaledJobs:
         cpu: "4.0"
         memory: 3Gi
     sideKiqQueue: process_qc
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 3600
   ingest-process-media:
     enabled: true
     maxReplicaCount: 5
@@ -467,20 +480,20 @@ scaledJobs:
         cpu: "0.5"
         memory: 0.8Gi
     sideKiqQueue: download_media
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 5400 # set to 90mins
   # Audiomatchfingerprint worker queue converted to scaledJob (concurrency 1, resources unchanged)
   audiomatch-fingerprint:
     enabled: true
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 2.5Gi
-        cpu: "1.5"
+        memory: 5500Mi  # p95 over 7d (was 6Gi == limit)
+        cpu: "1"        # p95 over 7d (was 1.5 == limit)
       limits:
         cpu: "1.5"
-        memory: 2.5Gi
+        memory: 8Gi     # raised from 6Gi; peak was 5.88 GiB (98% of old limit), OOMKills likely
     sideKiqQueue: audio_match_frames_fingerprint_tasks
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 28800 # set to 8h; audio files up to 180min, 2x buffer for processing time
   # Compare worker queue converted to scaledJob (concurrency 1, resources unchanged)
   compare-relate:
     enabled: true
@@ -596,13 +609,13 @@ scaledJobs:
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 2Gi
-        cpu: "3"
+        memory: 512Mi
+        cpu: "1"
       limits:
         cpu: "3"
-        memory: 2Gi
+        memory: 1500Mi
     sideKiqQueue: video_match_frames_extract_frames_tasks
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 5400
   process-extract:
     enabled: true
     maxReplicaCount: 5

@@ -99,8 +99,7 @@ dbPrepareJob:
     "helm.sh/hook-delete-policy": "before-hook-creation"
   argoSyncWaveAnnotations:
     argocd.argoproj.io/sync-wave: '-1'
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+
 
 rails_env: production
 logLevel: info

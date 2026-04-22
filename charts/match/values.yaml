@@ -222,7 +222,6 @@ metrics:
   enabled: true
   metricsPort: 9090
 
-# Ad Signal Workloads:
 webServers:
   port: 3000
   replicas: 1
@@ -720,11 +719,11 @@ env: []
 
 # Initial user configuration for seeding
 adminUser:
-  email: "admin@ad-signal.io"
+  email: "admin@snicketlabs.io"
   firstName: "Admin"
   lastName: "User"
   roles: "email_and_password,assure_admin"
-  organisationName: "Ad Signal"
+  organisationName: "Snicket Labs"
   organisationRoles: "assure_admin"
 
 # PostgreSQL subchart configuration

@@ -371,6 +371,10 @@ ingress:
     alb.ingress.kubernetes.io/backend-protocol: HTTP
     alb.ingress.kubernetes.io/healthcheck-path: /
     alb.ingress.kubernetes.io/success-codes: "200-402"
+    # Match performs long-running comparison requests. The ALB default idle
+    # timeout of 60s may cause 504 timeout errors on these requests. Increase to
+    # at least 300s (5 minutes) to allow comparisons to complete.
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=300
 
   hosts:
     - host: match.company.example.com
@@ -384,6 +388,41 @@ The application domain must be configured the same as the Ingress.
 ```
 domain: match.company.example.com
 ```
+
+### EKS Auto Mode
+
+On clusters running EKS Auto Mode the built-in `eks.amazonaws.com/alb` controller is used instead of the standalone AWS Load Balancer Controller. In this mode, ALB annotations such as `alb.ingress.kubernetes.io/load-balancer-attributes` are **not supported** — they are silently ignored.
+
+Use `ingress.ingressClassParams` to create an `IngressClassParams` resource instead:
+
+```yaml
+ingress:
+  enabled: true
+  className: "match-alb"
+  annotations:
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123123123:certificate/a11111-11111-11111-1111-1111
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-path: /up
+    alb.ingress.kubernetes.io/success-codes: "200-402"
+  hosts:
+    - host: match.company.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  # EKS Auto Mode: replaces the load-balancer-attributes annotation (which is ignored).
+  ingressClassParams:
+    create: true
+    scheme: internet-facing
+    loadBalancerAttributes:
+      - key: idle_timeout.timeout_seconds
+        value: "300"
+```
+
+Match is intended to run on a dedicated cluster. `IngressClassParams` is cluster-scoped, so if you share a cluster across environments, only one environment should set `ingressClassParams.create: true` for a given `className`.
 
 ### DNS
 
@@ -763,22 +802,31 @@ domain: your-domain-name.example.com # Your domain name
 
 ### Ingress Configuration
 
-Configure AWS Load Balancer Controller ingress.
+Match is intended to run on a dedicated cluster. Configure ingress for EKS Auto Mode — the built-in ALB controller does not honour `alb.ingress.kubernetes.io/load-balancer-attributes`, so the idle timeout is set via `ingressClassParams` instead.
 
 ```yaml
 ingress:
   enabled: true
-  className: "alb"
+  className: "match-alb"
   annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/certificate-arn: {YOUR_CERTIFICATE_ARN}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/backend-protocol: HTTP
-    alb.ingress.kubernetes.io/healthcheck-path: /users/sign_in
+    alb.ingress.kubernetes.io/healthcheck-path: /up
     alb.ingress.kubernetes.io/success-codes: "200-402"
     external-dns.alpha.kubernetes.io/hostname: {YOUR_DOMAIN}
+
+  # Match performs long-running comparison requests. The ALB default idle
+  # timeout of 60s may cause 504 timeout errors on these requests. On EKS Auto Mode
+  # this must be set via IngressClassParams rather than an annotation.
+  ingressClassParams:
+    create: true
+    scheme: internet-facing
+    loadBalancerAttributes:
+      - key: idle_timeout.timeout_seconds
+        value: "300"
 
   hosts:
     - host: {YOUR_DOMAIN}

@@ -1,11 +1,11 @@
 apiVersion: v2
 name: adsignal-match
-description: Ad-Signal Match Self Hosted
-home: https://ad-signal.io
-version: 1.0.4
+description: Snicket Labs Match Self Hosted
+home: https://snicketlabs.io
+version: 1.0.5
 maintainers:
-  - name: Ad-Signal Match
-    email: platform@ad-signal.io
+  - name: Snicket Labs Match
+    email: platform@snicketlabs.io
 type: application
 appVersion: "1.0.0"
 

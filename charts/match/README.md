@@ -749,7 +749,7 @@ Use this as a checklist when creating your own `your-custom-values.yaml` file.
 
 ## 1. Image Tags
 
-Specify image versions (usually provided by Ad Signal during deployment).
+Specify image versions (usually provided by Snicket Labs during deployment).
 
 ```yaml
 image:
@@ -896,7 +896,7 @@ s3:
 
 ## 7. Image Pull Secrets
 
-For configuring image pull secrets to authenticate with the Ad Signal container registry, see the [Image Pull Secrets](README.md#image-pull-secrets) section in the main README.
+For configuring image pull secrets to authenticate with the Snicket Labs (formerly Ad Signal) container registry, see the [Image Pull Secrets](README.md#image-pull-secrets) section in the main README.
 
 
 ## 8. Network Access Requirements
@@ -959,7 +959,7 @@ kubectl get secret adsignal-match-owning-user -n match -o jsonpath='{.data.passw
 
 ## Getting Help
 
-> For sizing recommendations, production configuration guidance, or deployment assistance, please consult with Ad Signal technical services.
+> For sizing recommendations, production configuration guidance, or deployment assistance, please consult with Snicket Labs technical services.
 
 **Common Issues:**
 - **Image pull errors**: Verify `imagePullSecrets` are correctly configured and that image tags are valid
@@ -977,7 +977,7 @@ Use this checklist to ensure you've replaced more temporary measures with produc
 - [ ] Migrated database password from manual Kubernetes secret to a secret manager
 - [ ] Configured Redis credentials using a secret manager instead of direct URLs
 - [ ] Configured SMTP using a secret manager
-- [ ] Set up monitoring and alerting (Prometheus, Grafana, Loki) # Please consult with Ad Signal technical services for production-ready solutions
+- [ ] Set up monitoring and alerting (Prometheus, Grafana, Loki) # Please consult with Snicket Labs technical services for production-ready solutions
 - [ ] Configured database backups and disaster recovery procedures
 - [ ] Reviewed and optimized resource requests and limits based on actual usage
 

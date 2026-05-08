@@ -88,8 +88,8 @@ image:
 
 fingerprinter:
   image:
-    repository: adsignal/stream-fp
-    tag: "x86_64-linux-sha-ef4ee63"
+    repository: adsignal/match-fp
+    tag: "0.0.1-d58ac1f"
 
 # Enable verbose debug logging on the fingerprinter sidecar (Rust + GStreamer).
 # Sets RUST_LOG=debug and GST_DEBUG=*:5 on the fingerprinter init container.
@@ -101,10 +101,10 @@ dbPrepareJob:
   helmHookAnnotations:
     "helm.sh/hook": post-install,pre-upgrade
     "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": "before-hook-creation"
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
   argoSyncWaveAnnotations:
-    argocd.argoproj.io/sync-wave: '-1'
-    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: '0'
+    argocd.argoproj.io/sync-options: Replace=true
 
 
 rails_env: production

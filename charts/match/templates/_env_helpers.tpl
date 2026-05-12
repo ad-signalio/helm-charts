@@ -43,10 +43,9 @@
   value: "{{.Values.log_path_mode}}"
 - name: LOG_PATH
   value: "{{.Values.log_path}}"
-- name: RAILS_DEVELOPMENT_SECRET
-  value: "kjsdjshbfjlshbefks"
+# Unused in external environments
 - name: SLACK_API_TOKEN
-  value: "shdbjhsbdfs"
+  value: "ignored"
 - name: "RAILS_LOG_TO_STDOUT"
   value: "1"
 - name: API_SECRET_KEY_BASE

@@ -158,7 +158,7 @@ spec:
         enableTLS: "{{ $.Values.kedaAutoScaling.redis.enabledTLS }}"
         port: "{{ $.Values.kedaAutoScaling.redis.port }}"
       {{- if not $.Values.kedaAutoScaling.redis.authenticationRef.enabled }}
-        address: {{ $.Values.sidekiq.redisServerUrl }}
+        address: {{ $.Values.sidekiq.redisServerUrl | trimPrefix "rediss://" | trimPrefix "redis://" }}
       {{- else }}
       authenticationRef:
         name: {{ $.Values.kedaAutoScaling.redis.authenticationRef.name }}

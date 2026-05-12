@@ -67,8 +67,12 @@ spec:
           {{- end }}
           volumeMounts:
             {{- include "match.volumeMounts" . | nindent 12 }}
+            - name: app-tmp
+              mountPath: /app/tmp
       volumes:
         {{- include "match.volumes" . | nindent 8 }}
+        - name: app-tmp
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

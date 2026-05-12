@@ -336,11 +336,17 @@ This allows environment-specific files to adjust scaling limits without duplicat
 
 The Match images require authentication to pull from our repositories. These credentials will be provided to you during initial setup.
 
-For example, to create a `kubernetes.io/dockerconfigjson` secret:
+For Docker Hub, create the secret using your Docker Hub username and an organisation access token:
 
+```bash
+kubectl -n match create secret docker-registry matchcredentials \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=adsignal \
+  --docker-email=docker@ad-signal.io \
+  --docker-password=<org-access-token>
 ```
-kubectl -n match create secret docker-registry matchcredentials --docker-server=<your-registry-server> --docker-username=<your-name> --docker-password=<your-pword> --docker-email=<your-email>
-```
+
+> The `--docker-server` must be `https://index.docker.io/v1/` for Docker Hub. Using `hub.docker.com` or omitting the path will result in `insufficient_scope: authorization failed` errors at image pull time.
 
 (Credentials can be added to your cluster using kubectl in the namespace the rest of the system is installed to (`match` in these examples).)
 
@@ -393,7 +399,7 @@ domain: match.company.example.com
 
 On clusters running EKS Auto Mode the built-in `eks.amazonaws.com/alb` controller is used instead of the standalone AWS Load Balancer Controller. In this mode, ALB annotations such as `alb.ingress.kubernetes.io/load-balancer-attributes` are **not supported** — they are silently ignored.
 
-Use `ingress.ingressClassParams` to create an `IngressClassParams` resource instead:
+Use `ingress.ingressClassParams` to create an `IngressClassParams` resource instead, if your cluster does not already have one configured.
 
 ```yaml
 ingress:
@@ -442,6 +448,7 @@ Before enabling monitoring, ensure you provide:
 
 The chart uses Prometheus PodMonitor and ServiceMonitor resources to automatically discover and scrape metrics from pods and services. This ensures metrics collection adapts as pods are created, scaled, or replaced, providing reliable observability for all workloads.
 
+If your cluster does not include support for `PodMonitor` or `ServiceMonitor` objects or you have not set `monitoring.enabled = true` you may disable them by setting `metrics.enabled = false`
 
 ### Backup Guidance
 
@@ -745,7 +752,60 @@ The folder `environment-sizes` contains a set of example size files for differen
 
 Deploying the chart with the default values will install Match to the `match` namespace, however, you will need to modify your own values.yml file to achieve a fully functional EKS deployment.
 
-Use this as a checklist when creating your own `your-custom-values.yaml` file.
+## Prerequisites (Reference Architecture users)
+
+Complete these steps before installing this chart.
+
+**1. Deploy the Terraform reference architecture**
+
+Follow the two-stage apply in the reference architecture README. Once complete, update your kubeconfig:
+
+```bash
+aws eks update-kubeconfig --region <your-region> --name <your-cluster-name>
+```
+
+**2. Create the two manually-provisioned AWS Secrets Manager secrets**
+
+These are not created by Terraform and must exist before installing the `secrets-configuration` chart:
+
+```bash
+# Honeybadger API key (provided to you by Snicket Labs)
+aws secretsmanager create-secret \
+  --name match-honeybadger-secret \
+  --region <your-region> \
+  --secret-string '{"apiKey":"<your-honeybadger-key>"}'
+
+# Docker Hub credentials (org access token provided to you by Snicket Labs)
+aws secretsmanager create-secret \
+  --name match-docker-secret \
+  --region <your-region> \
+  --secret-string '{"auths":{"https://index.docker.io/v1/":{"username":"adsignal","password":"<org-access-token>","auth":"<base64-encoded-username:token>"}}}'
+```
+
+**3. Install the `secrets-configuration` chart**
+
+This syncs all required Kubernetes secrets from AWS Secrets Manager into the cluster. Run from your infrastructure directory — all values come directly from Terraform outputs:
+
+```bash
+helm install secrets-configuration <path-to-reference-architecture>/optional-add-ons/secrets-configuration \
+  -n match --create-namespace \
+  --set clusterName=$(terraform output -json eks_cluster_details | jq -r '.cluster_name') \
+  --set apiSecretName=$(terraform output -raw api_secret_name) \
+  --set rdsPgSecretName=$(terraform output -raw rds_pg_secret_name) \
+  --set userSecretName=$(terraform output -raw user_secret_name) \
+  --set secretStoreRoleArn=$(terraform output -raw secret_store_role_arn) \
+  --set redisSecretName=$(terraform output -raw redis_secret_name)
+```
+
+The secrets (`match-api-secrets`, `match-postgres-password`, `match-owning-user-credentials`, `honeybadger-api-key`) are synced from AWS Secrets Manager when the match pods first mount their CSI volumes — they will not appear in `kubectl get secrets` until after the chart is installed and pods start.
+
+**4. Create the image pull secret**
+
+See [Image Pull Secrets](#image-pull-secrets) below.
+
+---
+
+Use the steps below as a checklist when creating your own `your-custom-values.yaml` file.
 
 ## 1. Image Tags
 
@@ -753,13 +813,13 @@ Specify image versions (usually provided by Snicket Labs during deployment).
 
 ```yaml
 image:
-  repository: adsignal/hub
-  tag: sha-EXAMPLE  # Update to your desired version
+  repository: adsignal/match
+  tag: 1.0.0
 
 fingerprinter:
   image:
-    repository: adsignal/stream-fp
-    tag: "x86_64-linux-sha-EXAMPLE"  # Update to your desired version
+    repository: adsignal/match-fp
+    tag: 1.0.0
 ```
 
 > Don't forget to configure the initial user account. See the [Initial User Configuration](#initial-user-configuration) section above for details.
@@ -839,11 +899,33 @@ ingress:
 
 ### PostgreSQL (RDS)
 
-> See the reference architecture for AWS Secrets Manager configuration and EKS ascp add-on. The below example is for quickstart manual configuration and we recommend using a secret manager.
+> See the reference architecture for AWS RDS and ElastiCache configuration.
 
-> See the reference architecture for AWS RDS and ElastiCache configuration
+This chart expects the database password to exist as a Kubernetes secret before install. There are two ways to provide it:
 
-**QuickStart**: Configure connection to your external RDS PostgreSQL database using direct values:
+**Option A — AWS Secrets Manager via ASCP (recommended for reference architecture users)**
+
+If you are using the [match-reference-architecture](https://github.com/ad-signalio/match-reference-architecture) Terraform, the RDS password is automatically stored in AWS Secrets Manager. Install the `secrets-configuration` chart from `optional-add-ons/secrets-configuration` in the reference architecture repo to sync it (and all other required secrets) into the cluster via the AWS Secrets Store CSI Driver:
+
+```bash
+helm install secrets-configuration ./optional-add-ons/secrets-configuration -n match -f your-values.yaml
+```
+
+This chart is what creates `match-postgres-password`, `match-api-secrets`, `match-owning-user-credentials`, and `honeybadger-api-key` as Kubernetes secrets. Without it (or equivalent manual steps below), the match pods will fail to start with `CreateContainerConfigError`.
+
+**Option B — Manual secret creation**
+
+If you are not using ASCP, create the required secrets manually:
+
+```bash
+kubectl create secret generic match-postgres-password \
+  --namespace match \
+  --from-literal=password='YOUR_DATABASE_PASSWORD'
+```
+
+See also the `secretKeys` section of `values.yaml` for `match-api-secrets` and other required secrets — all must exist before installing this chart.
+
+**Configure the connection:**
 
 ```yaml
 postgres:
@@ -855,14 +937,6 @@ postgres:
   passwordSecret:
     name: match-postgres-password
     key: password
-```
-
-Create a Kubernetes secret for the database password:
-
-```bash
-kubectl create secret generic match-postgres-password \
-  --namespace match \
-  --from-literal=password='YOUR_DATABASE_PASSWORD'
 ```
 
 ### Redis (ElastiCache)
@@ -899,12 +973,26 @@ s3:
 For configuring image pull secrets to authenticate with the Snicket Labs (formerly Ad Signal) container registry, see the [Image Pull Secrets](README.md#image-pull-secrets) section in the main README.
 
 
-## 8. Network Access Requirements
+## 8. Add HoneyBadger Credentials
+
+See the [Honeybadger Configuration](README#honeybadger-configuration) section.
+
+## 9. Configure the chart to use the EFS shared storage
+
+If you are using the Match reference AWS implementation you will need to configure shared storage:
+
+```
+storage:
+  sharedStorage:
+    storageClassName: match-shared-storage
+```
+
+## 10. Network Access Requirements
 
 | Direction | Service | Address(s) | Port | Description |
 |-----------|---------|------------|------|-------------|
 | Egress | Honeybadger | api.honeybadger.io | 443 | Application Error tracking [Honeybadger API IP addresses](https://docs.honeybadger.io/resources/security/#for-exception-monitoring)|
-| Egress | Docker Image | TBC | | Image hosting location supplied |
+| Egress | Docker Image | hub.docker.com | | Image hosting location supplied |
 | Egress | Helm Chart | ad-signalio.github.io | 443 | Our public Helm Chart repository
 | Egress | SMTP | Customers SMTP server | - | For password resets etc. |
 | Ingress | Web/API | Customer domain | 443 | Access to Web interface and API |
@@ -913,15 +1001,27 @@ For configuring image pull secrets to authenticate with the Snicket Labs (former
 
 ## Quick Start Checklist
 
-Use this checklist to ensure you've configured all required values:
+### Pre-install (Reference Architecture users)
 
-- [ ] Created and configured `imagePullSecrets`
-- [ ] Configured shared storage with ReadWriteMany PVC - (Optionally: See Reference Architecture)
-- [ ] Created IAM role for service account (IRSA) - (Optionally: See Reference Architecture)
-- [ ] Configured S3 bucket - (Optionally: See Reference Architecture)
-- [ ] Obtained ACM certificate for your domain - (Optionally: See Reference Architecture)
-- [ ] Updated domain name in all relevant places
-- [ ] Configured ingress annotations with correct ARNs
+- [ ] Terraform reference architecture deployed (two-stage apply complete)
+- [ ] kubeconfig updated (`aws eks update-kubeconfig`)
+- [ ] `match-honeybadger-secret` created in AWS Secrets Manager
+- [ ] `match-docker-secret` created in AWS Secrets Manager
+- [ ] `secrets-configuration` chart installed (syncs k8s secrets from AWS Secrets Manager)
+- [ ] `matchcredentials` image pull secret created in the `match` namespace
+
+### Values configuration
+
+- [ ] Image tags set (`image.tag`, `fingerprinter.image.tag`)
+- [ ] Initial user configured (`owningUser.email`, `owningUser.organisationName`)
+- [ ] IRSA service account annotation set
+- [ ] Domain name configured
+- [ ] Ingress configured with ACM certificate ARN
+- [ ] Postgres connection configured (use Terraform outputs)
+- [ ] Redis connection configured (use Terraform outputs)
+- [ ] S3 bucket configured (use Terraform outputs)
+- [ ] EFS shared storage class set (`storageClassName: match-shared-storage`)
+- [ ] `imagePullSecrets` set to `matchcredentials` in values
 
 ---
 
@@ -952,7 +1052,29 @@ helm install ad-signal/adsignal-match  \
 The helm command above will output the kubectl command to retrieve the initial user password, if you are unable to use this (Argo, Flux, etc.) you can use the kubectl command below:
 
 ```bash
-kubectl get secret adsignal-match-owning-user -n match -o jsonpath='{.data.password}' | base64 -d
+kubectl get secret match-owning-user-credentials -n match -o jsonpath='{.data.password}' | base64 -d
+```
+
+### Resetting the Initial Password
+
+The initial user's email is set via `owningUser.email` in your helm values. To reset the password from the command line, use the Rails runner on the web pod:
+
+```bash
+kubectl exec -n match deployment/web-adsignal-match -- bin/rails runner \
+  "u = User.find_by(email: 'admin@yourcompany.com'); \
+   new_pass = 'YourNewPassword123!'; \
+   u.update!(password: new_pass, password_confirmation: new_pass); \
+   puts 'Password reset for ' + u.email"
+```
+
+To sync the password back to the value in the Kubernetes secret (e.g. after rotating in AWS Secrets Manager):
+
+```bash
+NEW_PASS=$(kubectl get secret match-owning-user-credentials -n match -o jsonpath='{.data.password}' | base64 -d)
+kubectl exec -n match deployment/web-adsignal-match -- bin/rails runner \
+  "u = User.find_by(email: 'admin@yourcompany.com'); \
+   u.update!(password: '$NEW_PASS', password_confirmation: '$NEW_PASS'); \
+   puts 'Password reset for ' + u.email"
 ```
 
 ----

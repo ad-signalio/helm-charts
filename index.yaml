@@ -3,6 +3,37 @@ entries:
   adsignal-match:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-05-13T12:48:18.730269163Z"
+    dependencies:
+    - condition: postgres.enabled
+      name: postgres
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 0.5.0
+    - condition: redis.enabled
+      name: redis
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 0.3.3
+    - condition: monitoring.enabled
+      name: kube-prometheus-stack
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 78.4.0
+    - condition: monitoring.logging.enabled
+      name: loki-stack
+      repository: https://grafana.github.io/helm-charts
+      version: 2.10.2
+    description: Snicket Labs Match Self Hosted
+    digest: f277816abb6c0b3942819f986b1b040f4958067aa9c1111f4bb70db37919a230
+    home: https://snicketlabs.io
+    maintainers:
+    - email: platform@snicketlabs.io
+      name: Snicket Labs Match
+    name: adsignal-match
+    type: application
+    urls:
+    - https://github.com/ad-signalio/helm-charts/releases/download/adsignal-match-1.0.9/adsignal-match-1.0.9.tgz
+    version: 1.0.9
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2026-05-12T21:11:02.795904938Z"
     dependencies:
     - condition: postgres.enabled
@@ -311,4 +342,4 @@ entries:
     urls:
     - https://github.com/ad-signalio/helm-charts/releases/download/adsignal-match-0.1.0/adsignal-match-0.1.0.tgz
     version: 0.1.0
-generated: "2026-05-12T21:11:02.795969819Z"
+generated: "2026-05-13T12:48:18.730319648Z"

@@ -69,3 +69,5 @@ scaledJobs:
     maxReplicaCount: 15
   process-ingest-frames:
     maxReplicaCount: 15
+  comparison-longform-data-generation:
+    maxReplicaCount: 6

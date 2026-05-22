@@ -107,6 +107,7 @@ dbPrepareJob:
     argocd.argoproj.io/sync-options: Replace=true
 
 
+duration_async_required: "300"
 rails_env: production
 logLevel: info
 log_path_mode: "0664"
@@ -663,6 +664,17 @@ scaledJobs:
         memory: 2Gi
     sideKiqQueue: ingest_frames
     activeDeadlineSeconds: 600
+  comparison-longform-data-generation:
+    enabled: true
+    maxReplicaCount: 6
+    resources:
+      requests:
+        memory: 3Gi
+        cpu: 1
+      limits:
+        memory: 3Gi
+    sideKiqQueue: generate_grouped_comparison_result_data
+    activeDeadlineSeconds: 6600 # 110 minutes
 
 service:
   type: ClusterIP
@@ -675,14 +687,6 @@ ingress:
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
-    #
-    # AWS ALB: Match performs long-running comparison requests. The ALB default
-    # idle timeout of 60s may cause 504 timeout errors on these. Increase to at least
-    # 300s to allow comparisons to complete:
-    # alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=300
-    #
-    # NOTE: On EKS Auto Mode this annotation is ignored. Use ingress.ingressClassParams
-    # below to set loadBalancerAttributes instead.
   hosts:
     - host: chart-example.local
       paths:
@@ -703,8 +707,6 @@ ingress:
     create: false
     scheme: internet-facing
     loadBalancerAttributes: []
-      # - key: idle_timeout.timeout_seconds
-      #   value: "300"
 
 nodeSelector: {}
 

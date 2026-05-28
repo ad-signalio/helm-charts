@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rails-seed-job-{{ .Release.Revision }}
+  namespace: match
+  labels:
+    {{- include "match.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-seed
+  annotations:
+    {{- with .Values.dbSeedJob.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.useArgoSyncWaveAnnotations }}
+    {{- toYaml .Values.dbSeedJob.argoSyncWaveAnnotations | nindent 4 }}
+    {{- else }}
+    {{- toYaml .Values.dbSeedJob.helmHookAnnotations | nindent 4 }}
+    {{- end }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "match.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: db-seed
+    spec:
+      serviceAccountName: {{ include "match.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      containers:
+        - name: rails-db-seed
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          args: ["bin/rails", "db:seed"]
+          env:
+           {{- include "match.envVars" . | nindent 12 }}
+           {{- include "match.owningUserEnvVars" . | nindent 12 }}
+          volumeMounts:
+           {{- include "match.volumeMounts" . | nindent 12 }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      volumes:
+        {{- include "match.volumes" . | nindent 8 }}

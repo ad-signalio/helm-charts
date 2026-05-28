@@ -35,6 +35,8 @@
   value: "1"
 - name: AD_SIGNAL_ENVIRONMENT
   value: "external"
+- name: DURATION_ASYNC_REQUIRED
+  value: "{{ .Values.duration_async_required | default "300" }}"
 - name: RAILS_LOG_LEVEL
   value: "{{.Values.logLevel}}"
 - name: DISABLE_SPRING

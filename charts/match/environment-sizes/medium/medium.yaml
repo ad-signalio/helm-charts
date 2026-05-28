@@ -69,6 +69,8 @@ scaledJobs:
     maxReplicaCount: 10
   process-ingest-frames:
     maxReplicaCount: 10
+  comparison-longform-data-generation:
+    maxReplicaCount: 4
 
 workers:
   fingerprinter:

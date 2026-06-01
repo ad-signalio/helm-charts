@@ -809,17 +809,19 @@ Use the steps below as a checklist when creating your own `your-custom-values.ya
 
 ## 1. Image Tags
 
-Specify image versions (usually provided by Snicket Labs during deployment).
+The main `image.tag` defaults to the chart's `appVersion` if not set. Override it only when you need to pin the match app to a specific release independently of the chart. The fingerprinter image (`fingerprinter.image.tag`) must always be set explicitly as it releases on its own cadence.
 
 ```yaml
+# image.tag is optional — omit to use the chart's appVersion
 image:
   repository: adsignal/match
-  tag: 1.0.0
+  # tag: 2.0.0  # uncomment to override appVersion
 
+# fingerprinter.image.tag must be set explicitly
 fingerprinter:
   image:
     repository: adsignal/match-fp
-    tag: 1.0.0
+    tag: 2.0.0
 ```
 
 > Don't forget to configure the initial user account. See the [Initial User Configuration](#initial-user-configuration) section above for details.
@@ -1012,7 +1014,7 @@ storage:
 
 ### Values configuration
 
-- [ ] Image tags set (`image.tag`, `fingerprinter.image.tag`)
+- [ ] Fingerprinter image tag set (`fingerprinter.image.tag`) — match app defaults to chart `appVersion`
 - [ ] Initial user configured (`owningUser.email`, `owningUser.organisationName`)
 - [ ] IRSA service account annotation set
 - [ ] Domain name configured

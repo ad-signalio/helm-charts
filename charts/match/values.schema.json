@@ -1,0 +1,473 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "image",
+    "fingerprinter",
+    "s3",
+    "domain",
+    "secretKeys",
+    "storage",
+    "webServers",
+    "sidekiq",
+    "scaledJobs",
+    "scaledObjects",
+    "workers"
+  ],
+  "properties": {
+    "smtp": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "secret": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" }
+          }
+        }
+      }
+    },
+    "honeybadger": {
+      "type": "object",
+      "properties": {
+        "secretName": { "type": "string" },
+        "secretKey": { "type": "string" },
+        "environment": { "type": "string" }
+      }
+    },
+    "owningUser": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "organisationName": { "type": "string" },
+        "secret": {
+          "type": "object",
+          "required": ["generate", "name"],
+          "properties": {
+            "generate": { "type": "boolean" },
+            "name": { "type": "string" }
+          }
+        }
+      }
+    },
+    "useArgoSyncWaveAnnotations": { "type": "boolean" },
+    "kedaAutoScaling": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 30 },
+        "redis": {
+          "type": "object",
+          "properties": {
+            "pollingInterval": { "type": "integer" },
+            "port": { "type": "integer" },
+            "enabledTLS": { "type": "boolean" },
+            "databaseIndex": { "type": "integer" },
+            "authenticationRef": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "name": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "tag": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fingerprinter": {
+      "type": "object",
+      "required": ["image"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "required": ["repository", "tag"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "fingerPrinterDebug": { "type": "boolean" },
+    "dbPrepareJob": { "type": "object" },
+    "dbSeedJob": { "type": "object" },
+    "duration_async_required": { "type": "string" },
+    "rails_env": { "type": "string" },
+    "logLevel": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error", "fatal"]
+    },
+    "log_path_mode": { "type": "string" },
+    "log_path": { "type": "string" },
+    "secretKeys": {
+      "type": "object",
+      "required": ["secret"],
+      "properties": {
+        "secret": {
+          "type": "object",
+          "required": ["generate", "name"],
+          "properties": {
+            "generate": { "type": "boolean" },
+            "name": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "required": ["sharedStorage"],
+      "properties": {
+        "sharedStorage": {
+          "type": "object",
+          "required": ["enabled", "claimName"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "claimName": { "type": "string" },
+            "storageClassName": { "type": "string" },
+            "size": { "type": "string" },
+            "annotations": { "type": "object" }
+          }
+        },
+        "local": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "createLocalStorageClass": { "type": "boolean" }
+          }
+        },
+        "tmpStorage": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "path": { "type": "string" }
+          }
+        }
+      }
+    },
+    "volumes": { "type": "array" },
+    "volumeMounts": { "type": "array" },
+    "imagePullSecrets": { "type": "array" },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "extraEnvs": { "type": "array" },
+    "extraEnvSecrets": { "type": "array" },
+    "contentSecrets": { "type": "array" },
+    "serviceAccount": {
+      "type": "object",
+      "required": ["create"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "automount": { "type": "boolean" },
+        "annotations": { "type": "object" },
+        "name": { "type": "string" }
+      }
+    },
+    "podAnnotations": { "type": "object" },
+    "podLabels": { "type": "object" },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "runAsUser": { "type": "integer" },
+        "fsGroup": { "type": "integer" }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "properties": {
+        "capabilities": { "type": "object" },
+        "readOnlyRootFilesystem": { "type": "boolean" },
+        "runAsUser": { "type": "integer" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "metricsPort": { "type": "integer" }
+      }
+    },
+    "webServers": {
+      "type": "object",
+      "required": ["port", "replicas", "resources"],
+      "properties": {
+        "port": { "type": "integer" },
+        "replicas": { "type": "integer", "minimum": 1 },
+        "livenessProbe": { "type": "object" },
+        "readinessProbe": { "type": "object" },
+        "railsMaxThreads": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "railsConsole": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer" },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "workers": {
+      "type": "object",
+      "required": ["generic", "ingest", "process", "fingerprinter"],
+      "properties": {
+        "generic": { "$ref": "#/definitions/worker" },
+        "ingest": { "$ref": "#/definitions/worker" },
+        "process": { "$ref": "#/definitions/worker" },
+        "fingerprinter": { "$ref": "#/definitions/worker" }
+      },
+      "additionalProperties": { "$ref": "#/definitions/worker" }
+    },
+    "scaledObjects": {
+      "type": "object",
+      "required": ["generic"],
+      "properties": {
+        "generic": { "$ref": "#/definitions/scaledObject" }
+      },
+      "additionalProperties": { "$ref": "#/definitions/scaledObject" }
+    },
+    "scaledJobs": {
+      "type": "object",
+      "required": [
+        "fingerprinter-video",
+        "fingerprinter-audio",
+        "ingest-proxy-generate",
+        "ingest-attach-image",
+        "ingest-process-materials",
+        "ingest-materials",
+        "ingest-process-qc",
+        "ingest-process-media",
+        "ingest-download-media",
+        "audiomatch-fingerprint",
+        "compare-relate",
+        "process-complete-materials",
+        "process-compare-results",
+        "process-audio-insights",
+        "process-ai-tagging",
+        "process-unique-frames-groups",
+        "process-unique-frames-create",
+        "process-whole-media-compare",
+        "process-sbf",
+        "process-extract-frames",
+        "process-extract",
+        "process-video-fingerprint",
+        "process-frames",
+        "process-ingest-frames",
+        "comparison-longform-data-generation"
+      ],
+      "properties": {
+        "fingerprinter-video": { "$ref": "#/definitions/scaledJob" },
+        "fingerprinter-audio": { "$ref": "#/definitions/scaledJob" },
+        "ingest-proxy-generate": { "$ref": "#/definitions/scaledJob" },
+        "ingest-attach-image": { "$ref": "#/definitions/scaledJob" },
+        "ingest-process-materials": { "$ref": "#/definitions/scaledJob" },
+        "ingest-materials": { "$ref": "#/definitions/scaledJob" },
+        "ingest-process-qc": { "$ref": "#/definitions/scaledJob" },
+        "ingest-process-media": { "$ref": "#/definitions/scaledJob" },
+        "ingest-download-media": { "$ref": "#/definitions/scaledJob" },
+        "audiomatch-fingerprint": { "$ref": "#/definitions/scaledJob" },
+        "compare-relate": { "$ref": "#/definitions/scaledJob" },
+        "process-complete-materials": { "$ref": "#/definitions/scaledJob" },
+        "process-compare-results": { "$ref": "#/definitions/scaledJob" },
+        "process-audio-insights": { "$ref": "#/definitions/scaledJob" },
+        "process-ai-tagging": { "$ref": "#/definitions/scaledJob" },
+        "process-unique-frames-groups": { "$ref": "#/definitions/scaledJob" },
+        "process-unique-frames-create": { "$ref": "#/definitions/scaledJob" },
+        "process-whole-media-compare": { "$ref": "#/definitions/scaledJob" },
+        "process-sbf": { "$ref": "#/definitions/scaledJob" },
+        "process-extract-frames": { "$ref": "#/definitions/scaledJob" },
+        "process-extract": { "$ref": "#/definitions/scaledJob" },
+        "process-video-fingerprint": { "$ref": "#/definitions/scaledJob" },
+        "process-frames": { "$ref": "#/definitions/scaledJob" },
+        "process-ingest-frames": { "$ref": "#/definitions/scaledJob" },
+        "comparison-longform-data-generation": { "$ref": "#/definitions/scaledJob" }
+      },
+      "additionalProperties": { "$ref": "#/definitions/scaledJob" }
+    },
+    "service": {
+      "type": "object",
+      "required": ["type", "port"],
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object" },
+        "hosts": { "type": "array" },
+        "tls": { "type": "array" },
+        "ingressClassParams": {
+          "type": "object",
+          "properties": {
+            "create": { "type": "boolean" },
+            "scheme": { "type": "string" },
+            "loadBalancerAttributes": { "type": "array" }
+          }
+        }
+      }
+    },
+    "nodeSelector": { "type": "object" },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" },
+    "env": { "type": "array" },
+    "adminUser": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "roles": { "type": "string" },
+        "organisationName": { "type": "string" },
+        "organisationRoles": { "type": "string" }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "sidekiq": {
+      "type": "object",
+      "required": ["redisServerUrl", "redisClientUrl"],
+      "properties": {
+        "redisServerUrl": { "type": "string" },
+        "redisClientUrl": { "type": "string" }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "global": { "type": "object" },
+    "s3": {
+      "type": "object",
+      "required": ["primaryBucket", "region"],
+      "properties": {
+        "primaryBucket": { "type": "string", "minLength": 1 },
+        "accessKeyId": { "type": "string" },
+        "secretAccessKey": { "type": "string" },
+        "region": { "type": "string", "minLength": 1 }
+      }
+    },
+    "domain": { "type": "string", "minLength": 1 },
+    "monitoring": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "matchDashboards": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "materialProcessingPipelines": { "type": "string" },
+    "materialProcessingCount": { "type": "string" }
+  },
+  "definitions": {
+    "resourceQuantity": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" }
+      ]
+    },
+    "resourceSpec": {
+      "type": "object",
+      "properties": {
+        "cpu": { "$ref": "#/definitions/resourceQuantity" },
+        "memory": { "$ref": "#/definitions/resourceQuantity" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": { "$ref": "#/definitions/resourceSpec" },
+        "limits": { "$ref": "#/definitions/resourceSpec" }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "required": ["replicas", "queues", "sidekiqConcurrency", "sidekiqTimeout", "resources"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0 },
+        "queues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "priority"],
+            "properties": {
+              "name": { "type": "string" },
+              "priority": { "type": "integer" }
+            }
+          }
+        },
+        "sidekiqConcurrency": { "type": "integer", "minimum": 1 },
+        "sidekiqTimeout": { "type": "integer", "minimum": 1 },
+        "dbPoolSize": { "type": "integer" },
+        "dbFollowerPoolSize": { "type": "integer" },
+        "resources": { "$ref": "#/definitions/resources" }
+      },
+      "additionalProperties": true
+    },
+    "scaledObject": {
+      "type": "object",
+      "required": ["minReplicaCount", "maxReplicaCount", "sidekiqConcurrency", "sidekiqTimeout", "resources", "queues"],
+      "properties": {
+        "minReplicaCount": { "type": "integer", "minimum": 0 },
+        "maxReplicaCount": { "type": "integer", "minimum": 1 },
+        "sidekiqConcurrency": { "type": "integer", "minimum": 1 },
+        "dbPoolSize": { "type": "integer" },
+        "dbFollowerPoolSize": { "type": "integer" },
+        "sidekiqTimeout": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/definitions/resources" },
+        "queues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "priority"],
+            "properties": {
+              "name": { "type": "string" },
+              "priority": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "scaledJob": {
+      "type": "object",
+      "required": ["enabled", "maxReplicaCount", "resources", "sideKiqQueue", "activeDeadlineSeconds"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxReplicaCount": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/definitions/resources" },
+        "sideKiqQueue": { "type": "string", "minLength": 1 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    }
+  }
+}

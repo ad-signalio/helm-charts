@@ -2,12 +2,12 @@ apiVersion: v2
 name: adsignal-match
 description: Snicket Labs Match Self Hosted
 home: https://snicketlabs.io
-version: 1.2.0
+version: 2.0.0
 maintainers:
   - name: Snicket Labs Match
     email: platform@snicketlabs.io
 type: application
-appVersion: "1.0.0"
+appVersion: "2.0.0"
 
 dependencies:
   - name: postgres

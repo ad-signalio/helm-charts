@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "image",
     "fingerprinter",
@@ -386,7 +387,10 @@
       }
     },
     "materialProcessingPipelines": { "type": "string" },
-    "materialProcessingCount": { "type": "string" }
+    "materialProcessingCount": { "type": "string" },
+    "workerDeploymentStrategy": { "type": "string" },
+    "loki-stack": { "type": "object", "additionalProperties": true },
+    "kube-prometheus-stack": { "type": "object", "additionalProperties": true }
   },
   "definitions": {
     "resourceQuantity": {

@@ -90,7 +90,7 @@ image:
 fingerprinter:
   image:
     repository: adsignal/match-fp
-    tag: 2.0.0
+    tag: 2.0.1
 
 # Enable verbose debug logging on the fingerprinter sidecar (Rust + GStreamer).
 # Sets RUST_LOG=debug and GST_DEBUG=*:5 on the fingerprinter init container.

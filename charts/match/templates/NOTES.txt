@@ -5,6 +5,13 @@
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
   {{- end }}
 {{- end }}
+{{- else if .Values.httpRoute.enabled }}
+  Exposed via a Gateway API HTTPRoute attached to Gateway(s): {{ range .Values.httpRoute.parentRefs }}{{ .name }} {{ end }}
+{{- range .Values.httpRoute.hostnames }}
+  http://{{ . }}/
+{{- end }}
+  Find the Gateway's external address with:
+    kubectl get gateway -n {{ .Release.Namespace }} -o jsonpath='{.items[*].status.addresses[*].value}{{ "{{\"\\n\"}}" }}'
 {{- else if contains "NodePort" .Values.service.type }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "match.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")

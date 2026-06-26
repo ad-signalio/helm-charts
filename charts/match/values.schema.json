@@ -16,6 +16,9 @@
     "workers"
   ],
   "properties": {
+    "title": { "type": "string" },
+    "folder": { "type": "string" },
+    "status": { "type": "integer" },
     "smtp": {
       "type": "object",
       "properties": {
@@ -322,6 +325,25 @@
             "loadBalancerAttributes": { "type": "array" }
           }
         }
+      }
+    },
+    "httpRoute": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "annotations": { "type": "object" },
+        "parentRefs": { "type": "array" },
+        "hostnames": { "type": "array" },
+        "rules": { "type": "array" }
+      }
+    },
+    "gke": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "healthCheckPath": { "type": "string" }
       }
     },
     "nodeSelector": { "type": "object" },

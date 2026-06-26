@@ -1,3 +1,8 @@
+---
+title: Match Helm Values Reference
+folder: "Helm Documentation"
+status: 2
+---
 # SMTP configuration
 smtp:
   enabled: false
@@ -721,6 +726,40 @@ ingress:
     scheme: internet-facing
     loadBalancerAttributes: []
 
+# Gateway API HTTPRoute — cloud-agnostic alternative to ingress for
+# Gateway-API clusters (GKE, on-prem). The Gateway itself is cluster infra (owns
+# the LB IP, GatewayClass, and TLS cert); this route just attaches to it.
+# Disabled by default so AWS keeps using `ingress` above. Enable EITHER ingress
+# OR httpRoute, not both.
+httpRoute:
+  enabled: false
+  annotations: {}
+  # The infra-owned Gateway to attach to. Omit namespace when the Gateway is in
+  # the same namespace as this release (no ReferenceGrant needed). Set
+  # sectionName to bind a specific listener (e.g. "https").
+  parentRefs:
+    - name: match-gateway
+      # namespace: ""
+      # sectionName: ""
+  # Hostnames this route answers for. Empty = match all hosts on the listener
+  # (useful before a real domain/cert exists). Set to the app domain once TLS is on.
+  hostnames: []
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      # backendRef is always the web Service (adsignal-match) on service.port.
+
+# GKE-specific extras. Enable on GKE Gateway clusters. Currently adds
+# a HealthCheckPolicy so the GKE Gateway health-checks the app's /up endpoint —
+# GKE otherwise defaults the backend health check to "/", which the app
+# 302-redirects, marking the backend unhealthy. Off everywhere else (the
+# HealthCheckPolicy CRD is GKE-only).
+gke:
+  enabled: false
+  healthCheckPath: /up
+
 nodeSelector: {}
 
 tolerations: []
@@ -819,6 +858,12 @@ s3:
   accessKeyId: "dummy-key" # Replace with actual key
   secretAccessKey: "dummy-secret" # Replace with actual secret
   region: "us-east-1"
+  # Leave empty on AWS (uses IRSA + default S3 endpoint).
+  # On GCP: set endpoint to the GCS S3 XML API, region to "auto", and
+  # credentialsSecret to the ESO-synced HMAC Secret (eso-support match-s3-credentials,
+  # keys access_key_id / secret_access_key).
+  endpoint: "" # e.g. https://storage.googleapis.com
+  credentialsSecret: "" # e.g. match-s3-credentials
 
 domain: match-instance.example.com
 

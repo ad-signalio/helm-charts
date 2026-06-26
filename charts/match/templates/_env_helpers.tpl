@@ -71,6 +71,46 @@
   value: "{{ .Values.s3.region | default "us-east-1" }}"
 - name: AWS_REGION
   value: "{{ .Values.s3.region | default "us-east-1" }}"
+{{- if .Values.s3.endpoint }}
+{{- /* GCS: point Active Storage at the GCS S3 XML API.
+       Empty on AWS, where the app uses IRSA and the default S3 endpoint. */}}
+- name: S3_ENDPOINT
+  value: "{{ .Values.s3.endpoint }}"
+{{- /* The app ALSO uses raw aws-sdk-s3 clients (Aws::S3::Client.new) for ingest
+       download, kpi metrics, etc. — these don't read storage.yml. The AWS SDK
+       honours AWS_ENDPOINT_URL_S3 + AWS_* creds, so set them too to route those
+       paths at GCS. request_checksum_calculation=when_required avoids the SDK's
+       default checksum trailer that GCS rejects on uploads. */}}
+- name: AWS_ENDPOINT_URL_S3
+  value: "{{ .Values.s3.endpoint }}"
+- name: AWS_REQUEST_CHECKSUM_CALCULATION
+  value: "when_required"
+{{- end }}
+{{- if .Values.s3.credentialsSecret }}
+{{- /* HMAC creds from ESO (match-s3-credentials). AWS leaves this empty and
+       relies on IRSA, so S3_ACCESS_KEY/S3_SECRET_KEY are not set there.
+       AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY feed the raw aws-sdk-s3 clients. */}}
+- name: S3_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.s3.credentialsSecret }}
+      key: access_key_id
+- name: S3_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.s3.credentialsSecret }}
+      key: secret_access_key
+- name: AWS_ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.s3.credentialsSecret }}
+      key: access_key_id
+- name: AWS_SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.s3.credentialsSecret }}
+      key: secret_access_key
+{{- end }}
   {{- if .Values.domain }}
 - name: ADSIGNAL_BASE_DOMAIN
   value: {{ .Values.domain }}

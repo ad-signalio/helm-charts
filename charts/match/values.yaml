@@ -1,3 +1,7 @@
+# @doc-title: Match Helm Values Reference
+# @doc-folder: Technical Documentation
+# @doc-status: 2
+#
 # SMTP configuration
 smtp:
   enabled: false
@@ -33,7 +37,7 @@ smtp:
 honeybadger:
   secretName: honeybadger-api-key
   secretKey: apiKey
-  environment: ""  # REQUIRED: Your Honeybadger environment name (provided by Ad-Signal)
+  environment: "" # REQUIRED: Your Honeybadger environment name (provided by Ad-Signal)
 
 owningUser:
   # You may create a Kubernetes secret with the owning user's credentials.
@@ -50,7 +54,7 @@ owningUser:
   #password: "notsecure"
   organisationName: "Example Org"
   secret:
-    generate: false  # Set to true to allow Helm to generate the secret (not supported with Argo)
+    generate: false # Set to true to allow Helm to generate the secret (not supported with Argo)
     name: match-owning-user-credentials # Kubernetes secret containing the owning user's credentials
 
 # Set to true to add ArgoCD sync wave annotations instead of Helm hooks - useful when deploying via ArgoCD
@@ -106,7 +110,7 @@ dbPrepareJob:
   argoSyncWaveAnnotations:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
-    argocd.argoproj.io/sync-wave: '0'
+    argocd.argoproj.io/sync-wave: "0"
 
 dbSeedJob:
   annotations: {}
@@ -117,8 +121,7 @@ dbSeedJob:
   argoSyncWaveAnnotations:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
-    argocd.argoproj.io/sync-wave: '1'
-
+    argocd.argoproj.io/sync-wave: "1"
 
 duration_async_required: "300"
 rails_env: production
@@ -152,7 +155,7 @@ storage:
     size: 100Gi
     annotations: {}
     argoSyncWaveAnnotations:
-      argocd.argoproj.io/sync-wave: '-1'
+      argocd.argoproj.io/sync-wave: "-1"
 
   # Only for use with local chart development
   local:
@@ -170,12 +173,12 @@ storage:
 # Any additional file systems that contain content, or secrets required by the application may be mounted here
 # These are mounted on all pods, so PVCs must be ReadOnlyMany
 volumes: []
-    #- name: content-location
-    #  persistentVolumeClaim:
-    #    claimName: "content-pvc" # A PVC on the cluster that contains content to be processed by the application.
-    #- name: example-password
-    #  secret:
-    #    secretName: "example-password"
+  #- name: content-location
+  #  persistentVolumeClaim:
+  #    claimName: "content-pvc" # A PVC on the cluster that contains content to be processed by the application.
+  #- name: example-password
+  #  secret:
+  #    secretName: "example-password"
 volumeMounts: []
   #- name: content-location
   #  mountPath: "/content
@@ -213,7 +216,7 @@ serviceAccount:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-2"
   argoSyncWaveAnnotations:
-    argocd.argoproj.io/sync-wave: '-2'
+    argocd.argoproj.io/sync-wave: "-2"
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -500,11 +503,11 @@ scaledJobs:
     maxReplicaCount: 5
     resources:
       requests:
-        memory: 5500Mi  # p95 over 7d (was 6Gi == limit)
-        cpu: "1"        # p95 over 7d (was 1.5 == limit)
+        memory: 5500Mi # p95 over 7d (was 6Gi == limit)
+        cpu: "1" # p95 over 7d (was 1.5 == limit)
       limits:
         cpu: "1.5"
-        memory: 8Gi     # raised from 6Gi; peak was 5.88 GiB (98% of old limit), OOMKills likely
+        memory: 8Gi # raised from 6Gi; peak was 5.88 GiB (98% of old limit), OOMKills likely
     sideKiqQueue: audio_match_frames_fingerprint_tasks
     activeDeadlineSeconds: 28800 # set to 8h; audio files up to 180min, 2x buffer for processing time
   # Compare worker queue converted to scaledJob (concurrency 1, resources unchanged)
@@ -721,6 +724,40 @@ ingress:
     scheme: internet-facing
     loadBalancerAttributes: []
 
+# Gateway API HTTPRoute — cloud-agnostic alternative to ingress for
+# Gateway-API clusters (GKE, on-prem). The Gateway itself is cluster infra (owns
+# the LB IP, GatewayClass, and TLS cert); this route just attaches to it.
+# Disabled by default so AWS keeps using `ingress` above. Enable EITHER ingress
+# OR httpRoute, not both.
+httpRoute:
+  enabled: false
+  annotations: {}
+  # The infra-owned Gateway to attach to. Omit namespace when the Gateway is in
+  # the same namespace as this release (no ReferenceGrant needed). Set
+  # sectionName to bind a specific listener (e.g. "https").
+  parentRefs:
+    - name: match-gateway
+      # namespace: ""
+      # sectionName: ""
+  # Hostnames this route answers for. Empty = match all hosts on the listener
+  # (useful before a real domain/cert exists). Set to the app domain once TLS is on.
+  hostnames: []
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      # backendRef is always the web Service (adsignal-match) on service.port.
+
+# GKE-specific extras. Enable on GKE Gateway clusters. Currently adds
+# a HealthCheckPolicy so the GKE Gateway health-checks the app's /up endpoint —
+# GKE otherwise defaults the backend health check to "/", which the app
+# 302-redirects, marking the backend unhealthy. Off everywhere else (the
+# HealthCheckPolicy CRD is GKE-only).
+gke:
+  enabled: false
+  healthCheckPath: /up
+
 nodeSelector: {}
 
 tolerations: []
@@ -819,6 +856,12 @@ s3:
   accessKeyId: "dummy-key" # Replace with actual key
   secretAccessKey: "dummy-secret" # Replace with actual secret
   region: "us-east-1"
+  # Leave empty on AWS (uses IRSA + default S3 endpoint).
+  # On GCP: set endpoint to the GCS S3 XML API, region to "auto", and
+  # credentialsSecret to the ESO-synced HMAC Secret (eso-support match-s3-credentials,
+  # keys access_key_id / secret_access_key).
+  endpoint: "" # e.g. https://storage.googleapis.com
+  credentialsSecret: "" # e.g. match-s3-credentials
 
 domain: match-instance.example.com
 
@@ -839,7 +882,6 @@ monitoring:
 # loki-stack:
 #   loki:
 #     enabled: false
-
 
 materialProcessingPipelines: "default|duration>=0"
 materialProcessingCount: "default=5"

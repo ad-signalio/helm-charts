@@ -324,6 +324,25 @@
         }
       }
     },
+    "httpRoute": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "annotations": { "type": "object" },
+        "parentRefs": { "type": "array" },
+        "hostnames": { "type": "array" },
+        "rules": { "type": "array" }
+      }
+    },
+    "gke": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "healthCheckPath": { "type": "string" }
+      }
+    },
     "nodeSelector": { "type": "object" },
     "tolerations": { "type": "array" },
     "affinity": { "type": "object" },

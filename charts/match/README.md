@@ -1,3 +1,9 @@
+---
+title: Match Self Hosted Helm Chart
+folder: "Technical Documentation"
+status: 2
+---
+
 # Match Self Hosted Helm Chart
 
 ## Overview

@@ -78,6 +78,32 @@ Generate a consistent random password for the ingester user
 {{- end }}
 {{- end }}
 
+{{/*
+Init container that blocks pod startup until the database schema exists.
+Prevents workers and web from entering CrashLoopBackOff on fresh installs
+while db-prepare-initial is still running. On upgrades the schema already
+exists so this exits immediately on the first attempt.
+Skipped when useArgoSyncWaveAnnotations is true (ArgoCD manages ordering).
+*/}}
+{{- define "match.waitForSchema" -}}
+{{- if not .Values.useArgoSyncWaveAnnotations }}
+- name: wait-for-schema
+  image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+  imagePullPolicy: {{ .Values.image.pullPolicy }}
+  command:
+    - sh
+    - -c
+    - |
+      until PGPASSWORD="$DB_PASSWORD" psql -h "$DB_PRIMARY_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" \
+        -c "SELECT 1 FROM schema_migrations LIMIT 1" > /dev/null 2>&1; do
+        echo "waiting for schema to be ready..."
+        sleep 5
+      done
+  env:
+   {{- include "match.envVars" . | nindent 4 }}
+{{- end }}
+{{- end }}
+
 {{- define "match.volumes" -}}
 {{- if .Values.storage.sharedStorage.enabled }}
 - name: {{ .Values.storage.sharedStorage.claimName }}
@@ -86,10 +112,12 @@ Generate a consistent random password for the ingester user
 {{- end }}
 {{- if .Values.storage.tmpStorage.enabled }}
 - name: tmp-storage
+  {{- if .Values.storage.tmpStorage.sizeLimit }}
   emptyDir:
-    {{- if .Values.storage.tmpStorage.sizeLimit }}
     sizeLimit: {{ .Values.storage.tmpStorage.sizeLimit }}
-    {{- end }}
+  {{- else }}
+  emptyDir: {}
+  {{- end }}
 {{- end }}
 {{- with .Values.volumes }}
 {{ toYaml . }}
@@ -153,7 +181,7 @@ Generate a consistent random ingest credential encryption key for the first depl
 {{- if $existingSecret }}
 {{- index $existingSecret.data "ingest_credential_encryption_key" | b64dec }}
 {{- else }}
-{{- randAlphaNum 32 | sha256sum }}
+{{- randAlphaNum 32 }}
 {{- end }}
 {{- end }}
 

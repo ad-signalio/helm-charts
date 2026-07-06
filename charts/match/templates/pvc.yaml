@@ -1,17 +1,21 @@
 
-{{ if .Values.storage.sharedStorage.enabled }}
+{{- if and .Values.storage.sharedStorage.enabled .Release.IsInstall }}
+{{- /* PVC is only rendered on fresh install — skipped on helm upgrade entirely.
+       storageClassName is immutable once a PVC is bound, so any attempt to reconcile
+       the spec on upgrade causes an SSA field-manager conflict.
+       helm.sh/resource-policy: keep prevents Helm from orphan-deleting the PVC if it
+       is ever dropped from the release manifest (e.g. on upgrades where it is not rendered). */}}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .Values.storage.sharedStorage.claimName }}
   annotations:
+    helm.sh/resource-policy: keep
     {{- with .Values.storage.sharedStorage.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
     {{- if .Values.useArgoSyncWaveAnnotations }}
     {{- toYaml .Values.storage.sharedStorage.argoSyncWaveAnnotations | nindent 4 }}
-    # Note that we can't manage ordering of PVCs using helm hooks, without triggering impossible
-    # replace/delete cycles if the size or other values change.
     {{- end }}
 spec:
   accessModes:

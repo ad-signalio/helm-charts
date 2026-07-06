@@ -1,4 +1,21 @@
+<!---
+title: Match Self Hosted Helm Chart
+folder: "Technical Documentation"
+status: 2
+-->
+<!-- AUTO-GENERATED — do not edit. Source: docs/README.md + README.md.gotmpl. Regenerate with: helm-docs -->
+
+![Version: 2.0.1](https://img.shields.io/badge/Version-2.0.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.0](https://img.shields.io/badge/AppVersion-2.0.0-informational?style=flat-square)
+
+Snicket Labs Match Self Hosted
+
+**Homepage:** <https://snicketlabs.io>
+
 # Match Self Hosted Helm Chart
+
+## Upgrading
+
+See [UPGRADING.md](UPGRADING.md) for version-specific upgrade instructions.
 
 ## Overview
 
@@ -7,7 +24,7 @@ This chart will install a self hosted Match service.
 It is strongly suggested that you run this chart on a Kubernetes cluster dedicated to match. We provide a reference implementation suitable
 for AWS [here](https://github.com/ad-signalio/match-reference-architecture)
 
-## Requirements
+## Prerequisites
 
 A Kubernetes cluster (1.32+ for KEDA based autoscaling) with the following facilities:
 
@@ -78,6 +95,141 @@ The application makes use of two types of S3 buckets:
 - **Primary Bucket**: This is the main storage bucket for the application where artifacts such as thumbnails or proxy videos are stored.
 
 - **Content Bucket**: These are buckets containing the source media files that you wish to ingest into the system.
+
+### S3-Compatible Primary Storage (Non-AWS)
+
+By default Match uses AWS S3 for its primary storage (thumbnails, proxy videos, and other artifacts), authenticated via IRSA. If you are running on-premises or on a cloud that provides an S3-compatible object store (e.g. Ceph RGW, MinIO, GCS S3-interop), you can point Match at that instead.
+
+Configure the following `s3` values in your values file. Each value sets a corresponding environment variable that the application reads at runtime:
+
+| Value | Env var set | Required | Description |
+|---|---|---|---|
+| `s3.primaryBucket` | `S3_PRIMARY_BUCKET` | Yes | Name of the bucket to use for primary storage |
+| `s3.region` | `COMPATIBLE_S3_REGION`, `AWS_REGION` | No | Region string — most non-AWS stores ignore this, but the SDK requires it (default: `us-east-1`) |
+| `s3.compatibleEndpoint` | `COMPATIBLE_ENDPOINT_URL_S3` | Yes | Full URL of the S3-compatible endpoint that pods use for all S3 operations (e.g. `http://my-ceph-rgw:80`) |
+| `s3.compatiblePublicEndpoint` | `COMPATIBLE_PUBLIC_ENDPOINT_URL_S3` | No | Browser-reachable URL for the same store, when it differs from `s3.compatibleEndpoint` (see below) |
+| `s3.compatibleCredentialsSecret` | — | Yes | Name of a Kubernetes Secret containing HMAC credentials (sets `COMPATIBLE_S3_ACCESS_KEY` / `COMPATIBLE_S3_SECRET_KEY`) |
+| `s3.compatibleAccessKeyField` | — | No | Key name within `compatibleCredentialsSecret` for the access key ID (default: `access_key_id`) |
+| `s3.compatibleSecretKeyField` | — | No | Key name within `compatibleCredentialsSecret` for the secret access key (default: `secret_access_key`) |
+| `s3.compatibleForcePathStyle` | `COMPATIBLE_S3_FORCE_PATH_STYLE` | No | Use path-style S3 URLs — `"true"` or `"false"` (default: `"true"`). Required by Ceph, MinIO, and GCS S3 interop. Only set to `"false"` if your store explicitly uses virtual-hosted style URLs. |
+
+These values only take effect when `s3.compatibleEndpoint` is set. When it is not set, Match falls back to AWS S3 via IRSA with no static credentials required.
+
+#### GCS (Google Cloud Storage S3-interop) example
+
+```yaml
+s3:
+  primaryBucket: my-gcs-bucket-name
+  region: "auto"
+  compatibleEndpoint: "https://storage.googleapis.com"
+  compatibleCredentialsSecret: match-gcs-hmac-credentials   # Secret with keys access_key_id / secret_access_key
+```
+
+GCS S3-interop uses a single endpoint reachable from both pods and browsers, so `compatiblePublicEndpoint` is not required.
+
+#### Ceph / MinIO (in-cluster) example
+
+```yaml
+s3:
+  primaryBucket: my-bucket-name
+  region: "us-east-1"
+  compatibleEndpoint: "http://my-object-store.internal:80"
+  compatibleCredentialsSecret: my-s3-credentials   # Secret with keys access_key_id / secret_access_key
+```
+
+If your credentials Secret uses different key names (e.g. a Rook OBC-created Secret uses `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`), override them:
+
+```yaml
+s3:
+  primaryBucket: my-bucket-name
+  region: "us-east-1"
+  compatibleEndpoint: "http://rook-ceph-rgw.rook-ceph.svc:80"
+  compatibleCredentialsSecret: my-obc-secret
+  compatibleAccessKeyField: "AWS_ACCESS_KEY_ID"
+  compatibleSecretKeyField: "AWS_SECRET_ACCESS_KEY"
+```
+
+#### Split internal/external endpoint (`s3.compatiblePublicEndpoint`)
+
+If the endpoint pods use to reach your object store is not reachable from browsers (for example a Ceph RGW exposed only as a Kubernetes ClusterIP service), presigned URLs embedded in page responses will fail in the browser.
+
+Set `s3.compatiblePublicEndpoint` to a URL that browsers can reach (for example a MetalLB LoadBalancer IP or a hostname routable over VPN). Match will continue using `s3.compatibleEndpoint` for all pod-to-S3 operations and will use `s3.compatiblePublicEndpoint` only when generating presigned URLs returned to clients.
+
+```yaml
+s3:
+  primaryBucket: my-bucket-name
+  compatibleEndpoint: "http://rook-ceph-rgw-ceph-objectstore.rook-ceph.svc:80"  # internal ClusterIP
+  compatiblePublicEndpoint: "http://10.35.7.108"  # MetalLB LoadBalancer IP, reachable from browsers
+  compatibleCredentialsSecret: my-s3-credentials
+```
+
+If `COMPATIBLE_PUBLIC_ENDPOINT_URL_S3` is not set, presigned URLs use the same host as `COMPATIBLE_ENDPOINT_URL_S3`. This is correct for any setup where the object store endpoint is already reachable from browsers.
+
+#### Alternatives to the split endpoint
+
+`COMPATIBLE_PUBLIC_ENDPOINT_URL_S3` is only needed when your primary S3-compatible store is deployed inside the cluster (or otherwise has a different address for pods than for browser clients). This is typical of in-cluster Ceph RGW, MinIO, or similar stores exposed only via a ClusterIP service. If your object store already has a single address reachable from both pods and browsers — for example, an external MinIO instance or a managed S3-compatible service — you can omit `COMPATIBLE_PUBLIC_ENDPOINT_URL_S3` entirely.
+
+Where a split is unavoidable, the following infrastructure options let you collapse it to a single address, which is preferable because the split-endpoint path patches Rails' presigned URL generation and could be affected by future Rails upgrades.
+
+**Option A — Use the LoadBalancer IP for everything (simplest)**
+
+If you are already exposing your object store via a LoadBalancer (e.g. MetalLB), set `s3.compatibleEndpoint` to that IP and omit `s3.compatiblePublicEndpoint`:
+
+```yaml
+s3:
+  compatibleEndpoint: "http://10.35.7.108"   # LoadBalancer IP — reachable from both pods and browsers
+```
+
+Pod traffic to the LoadBalancer IP is typically handled by kube-proxy DNAT rules without leaving the cluster. Verify this works on your CNI before relying on it — on some configurations traffic will physically hairpin out of the cluster and back in, which adds latency but still works.
+
+**Option B — DNS split-horizon**
+
+Configure a single hostname (e.g. `s3.cluster.example.com`) that resolves to the object store's ClusterIP internally (via a CoreDNS override) and to the LoadBalancer IP externally (via VPN or external DNS). Both pods and browsers use the same hostname; no split endpoint config is needed. This avoids any hairpin and is the most efficient option, but requires coordinating cluster DNS and external/VPN DNS.
+
+**Option C — Ingress with a real hostname and TLS**
+
+Put an NGINX or Traefik ingress in front of your object store, backed by a DNS record and TLS certificate. Both pods and browsers use `https://s3.customer.example.com`. This is the most robust long-term option and is recommended if your deployment already has a working ingress controller and certificate management.
+
+#### What breaks if COMPATIBLE_PUBLIC_ENDPOINT_URL_S3 is misconfigured
+
+Only operations that send a presigned URL to a browser are affected:
+
+- **Manual file upload via the UI** — fails with a CORS or DNS error (browser cannot PUT to the presigned URL)
+- **Video and media playback in the UI** — fails to load (presigned GET URL contains the wrong host)
+
+Operations that are unaffected (all server-side, no presigned URLs sent to browsers):
+
+- API material creation via `media.url` — the server fetches the file directly, no presigned URL involved
+- Ingest source scanning and auto-ingest
+- All other background processing
+
+Customers who create materials exclusively via the API (providing a source URL rather than uploading a file) do not need `COMPATIBLE_PUBLIC_ENDPOINT_URL_S3` and are unaffected if it is absent or misconfigured.
+
+#### Bucket CORS configuration
+
+Match uploads files directly from the browser to the object store using presigned PUT URLs. The bucket must have a CORS policy that allows requests from the Match domain, otherwise uploads will fail with a 403 CORS error.
+
+Set the CORS policy using the AWS CLI (or any S3-compatible client) against your public endpoint, replacing `https://match.example.com` with your `domain` value:
+
+```bash
+aws s3api put-bucket-cors \
+  --endpoint-url <your-s3.compatiblePublicEndpoint-or-s3.compatibleEndpoint> \
+  --bucket <your-bucket-name> \
+  --region <your-region> \
+  --cors-configuration '{
+    "CORSRules": [{
+      "AllowedOrigins": ["https://match.example.com"],
+      "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3000
+    }]
+  }'
+```
+
+This only needs to be run once per bucket. It persists in the object store independently of Helm deployments, but must be re-applied if the bucket is recreated.
+
+> AWS S3 users should configure CORS via the bucket policy in the reference architecture Terraform rather than the CLI.
 
 ### Optional Content via S3 Compatible API
 
@@ -153,7 +305,6 @@ sidekiq:
 ### Provisioning Redis on the Kubernetes Cluster
 
 Optionally the chart can install a Redis database on your Kubernetes cluster using the CloudPirates OpenSource [Redis Helm Chart](https://github.com/CloudPirates-io/helm-charts/tree/main/charts/redis).
-
 
 > ** WARNING **
 > This database is NOT suitable for production use in an unmodified form as High Availability or resiliency are **NOT** configured.
@@ -334,30 +485,32 @@ This allows environment-specific files to adjust scaling limits without duplicat
 
 ## Image Pull Secrets
 
-The Match images require authentication to pull from our repositories. These credentials will be provided to you during initial setup.
+Match images and the Helm chart are hosted on the Snicketlabs registry at `registry.snicketlabs.io`. Access is controlled by a personal access token generated at **https://deploy.snicketlabs.io/settings/access-tokens**.
 
-For Docker Hub, create the secret using your Docker Hub username and an organisation access token:
+Log in to the registry with your token (required before pulling the Helm chart):
+
+```bash
+helm registry login registry.snicketlabs.io \
+  --username ignored \
+  --password <your-access-token>
+```
+
+Create a Kubernetes image pull secret in the namespace you are deploying to:
 
 ```bash
 kubectl -n match create secret docker-registry matchcredentials \
-  --docker-server=https://index.docker.io/v1/ \
-  --docker-username=adsignal \
-  --docker-email=docker@ad-signal.io \
-  --docker-password=<org-access-token>
+  --docker-server=registry.snicketlabs.io \
+  --docker-password=<your-access-token>
 ```
 
-> The `--docker-server` must be `https://index.docker.io/v1/` for Docker Hub. Using `hub.docker.com` or omitting the path will result in `insufficient_scope: authorization failed` errors at image pull time.
+Then reference the secret in your values file:
 
-(Credentials can be added to your cluster using kubectl in the namespace the rest of the system is installed to (`match` in these examples).)
-
-The location of the imagePullSecret must then be configured in the values file:
-
-```
+```yaml
 imagePullSecrets:
   - name: "matchcredentials"
 ```
 
-> We reccomend using a method to manage your kubernetes secrets, such as AWS Secrets Manager CSI Driver, External Secrets Operator, Vault, or another secret management solution of your choice.
+> We recommend using a secret management solution such as AWS Secrets Manager CSI Driver, External Secrets Operator, or Vault to manage this credential in production.
 
 ## Ingress and Domain
 
@@ -465,7 +618,6 @@ If you enable persistence for Prometheus or Grafana, ensure you back up the asso
 
 This chart requires Kubernetes 1.25+ and Helm 3.7+ for full compatibility with kube-prometheus-stack and dashboard features.
 
-
 The chart comes with dependencies that can install Grafana, Prometheus and Loki to the cluster to provide access to log, metrics and dashboards.
 These may require further configuration for your cluster's storage capabilities. You can bring your own monitoring and logging if you prefer.
 
@@ -475,7 +627,6 @@ Please modify this config with your chosen ingress and storage solutions. For ea
 
 - [Cloudwatch IAM role](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-iam-roles)
 - [Redis Credentials AWS Secret](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-elasticache-redis)
-
 
 ```
 monitoring:
@@ -633,7 +784,6 @@ monitoring:
     enabled: true
 ```
 
-
 > Please consult with Ad-Signal technical services for monitoring configuration.
 
 ## Application Errors
@@ -739,7 +889,6 @@ owningUser:
 
 > The initial password for this user will be randomly generated during deployment. You can reset it through the Match web interface or using the Rails console. It is also possible to set a password in the values file.
 
-
 ## Sizing the Workloads
 
 The folder `environment-sizes` contains a set of example size files for different environments. These can be used to size the workloads to your environment's needs. These roughly correlate with common cloud instance sizes (4xlarge, etc).
@@ -775,11 +924,11 @@ aws secretsmanager create-secret \
   --region <your-region> \
   --secret-string '{"apiKey":"<your-honeybadger-key>"}'
 
-# Docker Hub credentials (org access token provided to you by Snicket Labs)
+# Snicketlabs registry credentials (access token generated at https://deploy.snicketlabs.io/settings/access-tokens)
 aws secretsmanager create-secret \
   --name match-docker-secret \
   --region <your-region> \
-  --secret-string '{"auths":{"https://index.docker.io/v1/":{"username":"adsignal","password":"<org-access-token>","auth":"<base64-encoded-username:token>"}}}'
+  --secret-string '{"auths":{"registry.snicketlabs.io":{"password":"<your-access-token>"}}}'
 ```
 
 **3. Install the `secrets-configuration` chart**
@@ -814,13 +963,13 @@ The main `image.tag` defaults to the chart's `appVersion` if not set. Override i
 ```yaml
 # image.tag is optional — omit to use the chart's appVersion
 image:
-  repository: adsignal/match
+  repository: registry.snicketlabs.io/snicketlabs/match
   # tag: 2.0.0  # uncomment to override appVersion
 
 # fingerprinter.image.tag must be set explicitly
 fingerprinter:
   image:
-    repository: adsignal/match-fp
+    repository: registry.snicketlabs.io/snicketlabs/match-fp
     tag: 2.0.0
 ```
 
@@ -956,6 +1105,8 @@ sidekiq:
 
 ### 6. S3 Storage Configuration
 
+#### AWS S3 (IRSA)
+
 Create a primary S3 bucket for the application.
 
 > Consult the reference architecture for AWS S3 configuration.
@@ -970,10 +1121,13 @@ s3:
 
 > Ensure your IAM role (IRSA) has appropriate S3 permissions for the bucket.
 
+#### S3-Compatible Storage (Non-AWS)
+
+For Ceph, MinIO, GCS S3-interop, or any other S3-compatible store, see [S3-Compatible Primary Storage (Non-AWS)](#s3-compatible-primary-storage-non-aws) in the requirements section above.
+
 ## 7. Image Pull Secrets
 
 For configuring image pull secrets to authenticate with the Snicket Labs (formerly Ad Signal) container registry, see the [Image Pull Secrets](README.md#image-pull-secrets) section in the main README.
-
 
 ## 8. Add HoneyBadger Credentials
 
@@ -994,8 +1148,7 @@ storage:
 | Direction | Service | Address(s) | Port | Description |
 |-----------|---------|------------|------|-------------|
 | Egress | Honeybadger | api.honeybadger.io | 443 | Application Error tracking [Honeybadger API IP addresses](https://docs.honeybadger.io/resources/security/#for-exception-monitoring)|
-| Egress | Docker Image | hub.docker.com | | Image hosting location supplied |
-| Egress | Helm Chart | ad-signalio.github.io | 443 | Our public Helm Chart repository
+| Egress | Snicketlabs Registry | registry.snicketlabs.io | 443 | Container images and Helm chart |
 | Egress | SMTP | Customers SMTP server | - | For password resets etc. |
 | Ingress | Web/API | Customer domain | 443 | Access to Web interface and API |
 
@@ -1031,14 +1184,13 @@ storage:
 
 Once you've customized your `values.yaml` file, install the chart with the relevant size file:
 
-> Please consult with Ad-Signal technical services for sizing recommendations.
+> Please consult with Snicketlabs technical services for sizing recommendations.
+
+Charts are served directly from the Snicketlabs OCI registry. Ensure you are logged in first (see [Image Pull Secrets](#image-pull-secrets)), then install:
 
 ```bash
-helm repo add ad-signal https://ad-signalio.github.io/helm-charts
-```
-
-```bash
-helm install ad-signal/adsignal-match  \
+helm install oci://registry.snicketlabs.io/snicketlabs/helm-match/adsignal-match \
+  --version <chart-version> \
   --namespace match \
   --generate-name \
   --create-namespace \
@@ -1046,8 +1198,6 @@ helm install ad-signal/adsignal-match  \
 ```
 
 > **Note**: The multiple `-f` flags apply values files in order using Helm's deep merge. The environment size file (e.g., `environment-sizes/small/small.yaml`) overrides only the `maxReplicaCount` scaling limits from `values.yaml`. All other configurations (resources, queues, timeouts) are preserved from the base values. See [Values File Merging](#values-file-merging) for details.
-
-
 
 ### Retrieving the Initial Password
 
@@ -1105,4 +1255,443 @@ Use this checklist to ensure you've replaced more temporary measures with produc
 - [ ] Configured database backups and disaster recovery procedures
 - [ ] Reviewed and optimized resource requests and limits based on actual usage
 
+## Requirements
 
+| Repository | Name | Version |
+|------------|------|---------|
+| https://grafana.github.io/helm-charts | loki-stack | 2.10.2 |
+| https://prometheus-community.github.io/helm-charts | kube-prometheus-stack | 78.4.0 |
+| oci://registry-1.docker.io/cloudpirates | postgres | 0.5.0 |
+| oci://registry-1.docker.io/cloudpirates | redis | 0.3.3 |
+
+## Maintainers
+
+| Name | Email | Url |
+| ---- | ------ | --- |
+| Snicket Labs Match | <platform@snicketlabs.io> |  |
+
+## Values
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| adminUser.email | string | `"admin@snicketlabs.io"` |  |
+| adminUser.firstName | string | `"Admin"` |  |
+| adminUser.lastName | string | `"User"` |  |
+| adminUser.organisationName | string | `"Snicket Labs"` |  |
+| adminUser.organisationRoles | string | `"assure_admin"` |  |
+| adminUser.roles | string | `"email_and_password,assure_admin"` |  |
+| affinity | object | `{}` |  |
+| contentSecrets | list | `[]` |  |
+| dbPrepareJob.annotations | object | `{}` |  |
+| dbPrepareJob.argoSyncWaveAnnotations."argocd.argoproj.io/hook" | string | `"PostSync"` |  |
+| dbPrepareJob.argoSyncWaveAnnotations."argocd.argoproj.io/hook-delete-policy" | string | `"HookSucceeded"` |  |
+| dbPrepareJob.argoSyncWaveAnnotations."argocd.argoproj.io/sync-wave" | string | `"0"` |  |
+| dbPrepareJob.helmHookAnnotations."helm.sh/hook" | string | `"post-install,pre-upgrade"` |  |
+| dbPrepareJob.helmHookAnnotations."helm.sh/hook-delete-policy" | string | `"before-hook-creation,hook-succeeded"` |  |
+| dbPrepareJob.helmHookAnnotations."helm.sh/hook-weight" | string | `"0"` |  |
+| dbSeedJob.annotations | object | `{}` |  |
+| dbSeedJob.argoSyncWaveAnnotations."argocd.argoproj.io/hook" | string | `"PostSync"` |  |
+| dbSeedJob.argoSyncWaveAnnotations."argocd.argoproj.io/hook-delete-policy" | string | `"HookSucceeded"` |  |
+| dbSeedJob.argoSyncWaveAnnotations."argocd.argoproj.io/sync-wave" | string | `"1"` |  |
+| dbSeedJob.helmHookAnnotations."helm.sh/hook" | string | `"post-install,post-upgrade"` |  |
+| dbSeedJob.helmHookAnnotations."helm.sh/hook-delete-policy" | string | `"before-hook-creation,hook-succeeded"` |  |
+| dbSeedJob.helmHookAnnotations."helm.sh/hook-weight" | string | `"1"` |  |
+| domain | string | `"match-instance.example.com"` |  |
+| duration_async_required | string | `"300"` |  |
+| env | list | `[]` |  |
+| extraEnvSecrets | list | `[]` |  |
+| extraEnvs | list | `[]` |  |
+| fingerPrinterDebug | bool | `false` |  |
+| fingerprinter.image.repository | string | `"adsignal/match-fp"` |  |
+| fingerprinter.image.tag | string | `"2.0.1"` |  |
+| fullnameOverride | string | `"adsignal-match"` |  |
+| gke.enabled | bool | `false` |  |
+| gke.healthCheckPath | string | `"/up"` |  |
+| global.redis.password | string | `""` |  |
+| honeybadger.environment | string | `""` |  |
+| honeybadger.secretKey | string | `"apiKey"` |  |
+| honeybadger.secretName | string | `"honeybadger-api-key"` |  |
+| httpRoute.annotations | object | `{}` |  |
+| httpRoute.enabled | bool | `false` |  |
+| httpRoute.hostnames | list | `[]` |  |
+| httpRoute.parentRefs[0].name | string | `"match-gateway"` |  |
+| httpRoute.rules[0].matches[0].path.type | string | `"PathPrefix"` |  |
+| httpRoute.rules[0].matches[0].path.value | string | `"/"` |  |
+| image.pullPolicy | string | `"IfNotPresent"` |  |
+| image.repository | string | `"adsignal/match"` |  |
+| image.tag | string | `""` |  |
+| imagePullSecrets | list | `[]` |  |
+| ingress.annotations | object | `{}` |  |
+| ingress.className | string | `""` |  |
+| ingress.enabled | bool | `false` |  |
+| ingress.hosts[0].host | string | `"chart-example.local"` |  |
+| ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| ingress.ingressClassParams.create | bool | `false` |  |
+| ingress.ingressClassParams.loadBalancerAttributes | list | `[]` |  |
+| ingress.ingressClassParams.scheme | string | `"internet-facing"` |  |
+| ingress.tls | list | `[]` |  |
+| kedaAutoScaling.enabled | bool | `false` |  |
+| kedaAutoScaling.redis.authenticationRef.enabled | bool | `false` |  |
+| kedaAutoScaling.redis.authenticationRef.name | string | `"keda-trigger-auth-redis"` |  |
+| kedaAutoScaling.redis.databaseIndex | int | `0` |  |
+| kedaAutoScaling.redis.enabledTLS | bool | `true` |  |
+| kedaAutoScaling.redis.pollingInterval | int | `10` |  |
+| kedaAutoScaling.redis.port | int | `6379` |  |
+| kedaAutoScaling.terminationGracePeriodSeconds | int | `30` |  |
+| logLevel | string | `"info"` |  |
+| log_path | string | `"/app/log/production.log"` |  |
+| log_path_mode | string | `"0664"` |  |
+| materialProcessingCount | string | `"default=5"` |  |
+| materialProcessingPipelines | string | `"default|duration>=0"` |  |
+| metrics.enabled | bool | `true` |  |
+| metrics.metricsPort | int | `9090` |  |
+| monitoring.enabled | bool | `false` |  |
+| monitoring.matchDashboards.enabled | bool | `false` |  |
+| nameOverride | string | `"adsignal-match"` |  |
+| nodeSelector | object | `{}` |  |
+| owningUser.email | string | `"admin@example.invalid"` |  |
+| owningUser.firstName | string | `"Admin"` |  |
+| owningUser.lastName | string | `"User"` |  |
+| owningUser.organisationName | string | `"Example Org"` |  |
+| owningUser.secret.generate | bool | `false` |  |
+| owningUser.secret.name | string | `"match-owning-user-credentials"` |  |
+| podAnnotations | object | `{}` |  |
+| podLabels | object | `{}` |  |
+| podSecurityContext.fsGroup | int | `65532` |  |
+| podSecurityContext.runAsUser | int | `65532` |  |
+| postgres.auth.database | string | `"match"` |  |
+| postgres.auth.username | string | `"matchdb"` |  |
+| postgres.enabled | bool | `false` |  |
+| postgres.fullnameOverride | string | `"match-postgres"` |  |
+| postgres.primary.resources.limits.cpu | string | `"500m"` |  |
+| postgres.primary.resources.limits.memory | string | `"512Mi"` |  |
+| postgres.primary.resources.requests.cpu | string | `"100m"` |  |
+| postgres.primary.resources.requests.memory | string | `"256Mi"` |  |
+| railsConsole.enabled | bool | `false` |  |
+| railsConsole.replicas | int | `1` |  |
+| railsConsole.resources.limits.memory | string | `"1Gi"` |  |
+| railsConsole.resources.requests.cpu | string | `"50m"` |  |
+| railsConsole.resources.requests.memory | string | `"512Mi"` |  |
+| rails_env | string | `"production"` |  |
+| redis.auth.enabled | bool | `false` |  |
+| redis.enabled | bool | `false` |  |
+| redis.master.resources.limits.cpu | string | `"200m"` |  |
+| redis.master.resources.limits.memory | string | `"256Mi"` |  |
+| redis.master.resources.requests.cpu | string | `"100m"` |  |
+| redis.master.resources.requests.memory | string | `"128Mi"` |  |
+| redis.port | int | `6379` |  |
+| redis.replica.resources.limits.cpu | string | `"200m"` |  |
+| redis.replica.resources.limits.memory | string | `"256Mi"` |  |
+| redis.replica.resources.requests.cpu | string | `"100m"` |  |
+| redis.replica.resources.requests.memory | string | `"128Mi"` |  |
+| redis.useSentinel | bool | `false` |  |
+| s3.accessKeyId | string | `"dummy-key"` |  |
+| s3.credentialsSecret | string | `""` |  |
+| s3.endpoint | string | `""` |  |
+| s3.primaryBucket | string | `"adsignal-primary-bucket"` |  |
+| s3.region | string | `"us-east-1"` |  |
+| s3.secretAccessKey | string | `"dummy-secret"` |  |
+| scaledJobs.audiomatch-fingerprint.activeDeadlineSeconds | int | `28800` |  |
+| scaledJobs.audiomatch-fingerprint.enabled | bool | `true` |  |
+| scaledJobs.audiomatch-fingerprint.maxReplicaCount | int | `5` |  |
+| scaledJobs.audiomatch-fingerprint.resources.limits.cpu | string | `"1.5"` |  |
+| scaledJobs.audiomatch-fingerprint.resources.limits.memory | string | `"8Gi"` |  |
+| scaledJobs.audiomatch-fingerprint.resources.requests.cpu | string | `"1"` |  |
+| scaledJobs.audiomatch-fingerprint.resources.requests.memory | string | `"5500Mi"` |  |
+| scaledJobs.audiomatch-fingerprint.sideKiqQueue | string | `"audio_match_frames_fingerprint_tasks"` |  |
+| scaledJobs.compare-relate.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.compare-relate.enabled | bool | `true` |  |
+| scaledJobs.compare-relate.maxReplicaCount | int | `5` |  |
+| scaledJobs.compare-relate.resources.limits.cpu | string | `"0.5"` |  |
+| scaledJobs.compare-relate.resources.limits.memory | string | `"1Gi"` |  |
+| scaledJobs.compare-relate.resources.requests.cpu | string | `"0.5"` |  |
+| scaledJobs.compare-relate.resources.requests.memory | string | `"1Gi"` |  |
+| scaledJobs.compare-relate.sideKiqQueue | string | `"relate_materials"` |  |
+| scaledJobs.comparison-longform-data-generation.activeDeadlineSeconds | int | `6600` |  |
+| scaledJobs.comparison-longform-data-generation.enabled | bool | `true` |  |
+| scaledJobs.comparison-longform-data-generation.maxReplicaCount | int | `6` |  |
+| scaledJobs.comparison-longform-data-generation.resources.limits.memory | string | `"3Gi"` |  |
+| scaledJobs.comparison-longform-data-generation.resources.requests.cpu | int | `1` |  |
+| scaledJobs.comparison-longform-data-generation.resources.requests.memory | string | `"3Gi"` |  |
+| scaledJobs.comparison-longform-data-generation.sideKiqQueue | string | `"generate_grouped_comparison_result_data"` |  |
+| scaledJobs.fingerprinter-audio.activeDeadlineSeconds | int | `3600` |  |
+| scaledJobs.fingerprinter-audio.enabled | bool | `true` |  |
+| scaledJobs.fingerprinter-audio.fingerprinter.resources.limits.cpu | string | `"4.5"` |  |
+| scaledJobs.fingerprinter-audio.fingerprinter.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.fingerprinter-audio.fingerprinter.resources.requests.cpu | string | `"4.5"` |  |
+| scaledJobs.fingerprinter-audio.fingerprinter.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.fingerprinter-audio.maxReplicaCount | int | `2` |  |
+| scaledJobs.fingerprinter-audio.resources.limits.cpu | string | `"1500m"` |  |
+| scaledJobs.fingerprinter-audio.resources.limits.memory | string | `"2.5Gi"` |  |
+| scaledJobs.fingerprinter-audio.resources.requests.cpu | string | `"1500m"` |  |
+| scaledJobs.fingerprinter-audio.resources.requests.memory | string | `"2.5Gi"` |  |
+| scaledJobs.fingerprinter-audio.sideKiqQueue | string | `"native_audio_processing_tasks"` |  |
+| scaledJobs.fingerprinter-video.activeDeadlineSeconds | int | `14400` |  |
+| scaledJobs.fingerprinter-video.enabled | bool | `true` |  |
+| scaledJobs.fingerprinter-video.fingerprinter.resources.limits.cpu | string | `"5"` |  |
+| scaledJobs.fingerprinter-video.fingerprinter.resources.limits.memory | string | `"4Gi"` |  |
+| scaledJobs.fingerprinter-video.fingerprinter.resources.requests.cpu | string | `"3.5"` |  |
+| scaledJobs.fingerprinter-video.fingerprinter.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.fingerprinter-video.maxReplicaCount | int | `2` |  |
+| scaledJobs.fingerprinter-video.resources.limits.cpu | string | `"500m"` |  |
+| scaledJobs.fingerprinter-video.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.fingerprinter-video.resources.requests.cpu | string | `"200m"` |  |
+| scaledJobs.fingerprinter-video.resources.requests.memory | string | `"850Mi"` |  |
+| scaledJobs.fingerprinter-video.sideKiqQueue | string | `"video_match_frames_native_fingerprint_tasks"` |  |
+| scaledJobs.ingest-attach-image.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.ingest-attach-image.enabled | bool | `true` |  |
+| scaledJobs.ingest-attach-image.maxReplicaCount | int | `5` |  |
+| scaledJobs.ingest-attach-image.resources.limits.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-attach-image.resources.limits.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-attach-image.resources.requests.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-attach-image.resources.requests.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-attach-image.sideKiqQueue | string | `"video_match_frames_attach_image_tasks"` |  |
+| scaledJobs.ingest-download-media.activeDeadlineSeconds | int | `5400` |  |
+| scaledJobs.ingest-download-media.enabled | bool | `true` |  |
+| scaledJobs.ingest-download-media.maxReplicaCount | int | `5` |  |
+| scaledJobs.ingest-download-media.resources.limits.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-download-media.resources.limits.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-download-media.resources.requests.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-download-media.resources.requests.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-download-media.sideKiqQueue | string | `"download_media"` |  |
+| scaledJobs.ingest-materials.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.ingest-materials.enabled | bool | `true` |  |
+| scaledJobs.ingest-materials.maxReplicaCount | int | `5` |  |
+| scaledJobs.ingest-materials.resources.limits.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-materials.resources.limits.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-materials.resources.requests.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-materials.resources.requests.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-materials.sideKiqQueue | string | `"ingest_materials"` |  |
+| scaledJobs.ingest-process-materials.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.ingest-process-materials.enabled | bool | `true` |  |
+| scaledJobs.ingest-process-materials.maxReplicaCount | int | `5` |  |
+| scaledJobs.ingest-process-materials.resources.limits.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-process-materials.resources.limits.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-process-materials.resources.requests.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-process-materials.resources.requests.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-process-materials.sideKiqQueue | string | `"process_materials"` |  |
+| scaledJobs.ingest-process-media.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.ingest-process-media.enabled | bool | `true` |  |
+| scaledJobs.ingest-process-media.maxReplicaCount | int | `5` |  |
+| scaledJobs.ingest-process-media.resources.limits.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-process-media.resources.limits.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-process-media.resources.requests.cpu | string | `"0.5"` |  |
+| scaledJobs.ingest-process-media.resources.requests.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-process-media.sideKiqQueue | string | `"process_media"` |  |
+| scaledJobs.ingest-process-qc.activeDeadlineSeconds | int | `3600` |  |
+| scaledJobs.ingest-process-qc.enabled | bool | `true` |  |
+| scaledJobs.ingest-process-qc.maxReplicaCount | int | `2` |  |
+| scaledJobs.ingest-process-qc.resources.limits.cpu | string | `"4.0"` |  |
+| scaledJobs.ingest-process-qc.resources.limits.memory | string | `"3Gi"` |  |
+| scaledJobs.ingest-process-qc.resources.requests.cpu | string | `"2.0"` |  |
+| scaledJobs.ingest-process-qc.resources.requests.memory | string | `"0.8Gi"` |  |
+| scaledJobs.ingest-process-qc.sideKiqQueue | string | `"process_qc"` |  |
+| scaledJobs.ingest-proxy-generate.activeDeadlineSeconds | int | `5400` |  |
+| scaledJobs.ingest-proxy-generate.enabled | bool | `true` |  |
+| scaledJobs.ingest-proxy-generate.maxReplicaCount | int | `5` |  |
+| scaledJobs.ingest-proxy-generate.resources.limits.cpu | string | `"6"` |  |
+| scaledJobs.ingest-proxy-generate.resources.limits.memory | string | `"4Gi"` |  |
+| scaledJobs.ingest-proxy-generate.resources.requests.cpu | string | `"2"` |  |
+| scaledJobs.ingest-proxy-generate.resources.requests.memory | string | `"1.25Gi"` |  |
+| scaledJobs.ingest-proxy-generate.sideKiqQueue | string | `"proxy_generate_tasks"` |  |
+| scaledJobs.process-ai-tagging.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-ai-tagging.enabled | bool | `true` |  |
+| scaledJobs.process-ai-tagging.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-ai-tagging.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-ai-tagging.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-ai-tagging.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-ai-tagging.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-ai-tagging.sideKiqQueue | string | `"ai_tagging"` |  |
+| scaledJobs.process-audio-insights.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-audio-insights.enabled | bool | `true` |  |
+| scaledJobs.process-audio-insights.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-audio-insights.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-audio-insights.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-audio-insights.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-audio-insights.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-audio-insights.sideKiqQueue | string | `"audio_insights"` |  |
+| scaledJobs.process-compare-results.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-compare-results.enabled | bool | `true` |  |
+| scaledJobs.process-compare-results.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-compare-results.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-compare-results.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-compare-results.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-compare-results.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-compare-results.sideKiqQueue | string | `"compare_materials_results"` |  |
+| scaledJobs.process-complete-materials.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-complete-materials.enabled | bool | `true` |  |
+| scaledJobs.process-complete-materials.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-complete-materials.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-complete-materials.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-complete-materials.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-complete-materials.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-complete-materials.sideKiqQueue | string | `"complete_materials"` |  |
+| scaledJobs.process-extract-frames.activeDeadlineSeconds | int | `5400` |  |
+| scaledJobs.process-extract-frames.enabled | bool | `true` |  |
+| scaledJobs.process-extract-frames.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-extract-frames.resources.limits.cpu | string | `"3"` |  |
+| scaledJobs.process-extract-frames.resources.limits.memory | string | `"1500Mi"` |  |
+| scaledJobs.process-extract-frames.resources.requests.cpu | string | `"1"` |  |
+| scaledJobs.process-extract-frames.resources.requests.memory | string | `"512Mi"` |  |
+| scaledJobs.process-extract-frames.sideKiqQueue | string | `"video_match_frames_extract_frames_tasks"` |  |
+| scaledJobs.process-extract.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-extract.enabled | bool | `true` |  |
+| scaledJobs.process-extract.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-extract.resources.limits.cpu | string | `"2"` |  |
+| scaledJobs.process-extract.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-extract.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-extract.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-extract.sideKiqQueue | string | `"video_match_frames_extract_tasks"` |  |
+| scaledJobs.process-frames.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-frames.enabled | bool | `true` |  |
+| scaledJobs.process-frames.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-frames.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-frames.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-frames.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-frames.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-frames.sideKiqQueue | string | `"process_frames"` |  |
+| scaledJobs.process-ingest-frames.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-ingest-frames.enabled | bool | `true` |  |
+| scaledJobs.process-ingest-frames.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-ingest-frames.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-ingest-frames.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-ingest-frames.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-ingest-frames.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-ingest-frames.sideKiqQueue | string | `"ingest_frames"` |  |
+| scaledJobs.process-sbf.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-sbf.enabled | bool | `true` |  |
+| scaledJobs.process-sbf.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-sbf.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-sbf.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-sbf.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-sbf.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-sbf.sideKiqQueue | string | `"process_sbf"` |  |
+| scaledJobs.process-unique-frames-create.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-unique-frames-create.enabled | bool | `true` |  |
+| scaledJobs.process-unique-frames-create.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-unique-frames-create.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-unique-frames-create.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-unique-frames-create.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-unique-frames-create.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-unique-frames-create.sideKiqQueue | string | `"video_unique_frames_create_tasks"` |  |
+| scaledJobs.process-unique-frames-groups.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-unique-frames-groups.enabled | bool | `true` |  |
+| scaledJobs.process-unique-frames-groups.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-unique-frames-groups.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-unique-frames-groups.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-unique-frames-groups.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-unique-frames-groups.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-unique-frames-groups.sideKiqQueue | string | `"video_unique_frames_create_groups_tasks"` |  |
+| scaledJobs.process-video-fingerprint.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-video-fingerprint.enabled | bool | `true` |  |
+| scaledJobs.process-video-fingerprint.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-video-fingerprint.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-video-fingerprint.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-video-fingerprint.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-video-fingerprint.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-video-fingerprint.sideKiqQueue | string | `"video_match_frames_fingerprint_tasks"` |  |
+| scaledJobs.process-whole-media-compare.activeDeadlineSeconds | int | `600` |  |
+| scaledJobs.process-whole-media-compare.enabled | bool | `true` |  |
+| scaledJobs.process-whole-media-compare.maxReplicaCount | int | `5` |  |
+| scaledJobs.process-whole-media-compare.resources.limits.cpu | string | `"0.75"` |  |
+| scaledJobs.process-whole-media-compare.resources.limits.memory | string | `"2Gi"` |  |
+| scaledJobs.process-whole-media-compare.resources.requests.cpu | string | `"0.75"` |  |
+| scaledJobs.process-whole-media-compare.resources.requests.memory | string | `"2Gi"` |  |
+| scaledJobs.process-whole-media-compare.sideKiqQueue | string | `"video_whole_media_compare_tasks"` |  |
+| scaledObjects.generic.dbFollowerPoolSize | int | `10` |  |
+| scaledObjects.generic.dbPoolSize | int | `10` |  |
+| scaledObjects.generic.maxReplicaCount | int | `3` |  |
+| scaledObjects.generic.minReplicaCount | int | `1` |  |
+| scaledObjects.generic.queues[0].name | string | `"default"` |  |
+| scaledObjects.generic.queues[0].priority | int | `1` |  |
+| scaledObjects.generic.queues[1].name | string | `"pipeline"` |  |
+| scaledObjects.generic.queues[1].priority | int | `2` |  |
+| scaledObjects.generic.queues[2].name | string | `"mailers"` |  |
+| scaledObjects.generic.queues[2].priority | int | `3` |  |
+| scaledObjects.generic.queues[3].name | string | `"active_storage_purge"` |  |
+| scaledObjects.generic.queues[3].priority | int | `4` |  |
+| scaledObjects.generic.queues[4].name | string | `"refresh_ingest_source_reports"` |  |
+| scaledObjects.generic.queues[4].priority | int | `5` |  |
+| scaledObjects.generic.resources.limits.cpu | string | `"300m"` |  |
+| scaledObjects.generic.resources.limits.memory | string | `"1500Mi"` |  |
+| scaledObjects.generic.resources.requests.cpu | string | `"300m"` |  |
+| scaledObjects.generic.resources.requests.memory | string | `"300Mi"` |  |
+| scaledObjects.generic.sidekiqConcurrency | int | `10` |  |
+| scaledObjects.generic.sidekiqTimeout | int | `30` |  |
+| secretKeys.secret.generate | bool | `false` |  |
+| secretKeys.secret.name | string | `"match-api-secrets"` |  |
+| securityContext.capabilities.drop[0] | string | `"ALL"` |  |
+| securityContext.readOnlyRootFilesystem | bool | `true` |  |
+| securityContext.runAsUser | int | `65532` |  |
+| service.port | int | `3000` |  |
+| service.type | string | `"ClusterIP"` |  |
+| serviceAccount.annotations | object | `{}` |  |
+| serviceAccount.argoSyncWaveAnnotations."argocd.argoproj.io/sync-wave" | string | `"-2"` |  |
+| serviceAccount.automount | bool | `true` |  |
+| serviceAccount.create | bool | `true` |  |
+| serviceAccount.helmHookAnnotations."helm.sh/hook" | string | `"pre-install,pre-upgrade"` |  |
+| serviceAccount.helmHookAnnotations."helm.sh/hook-weight" | string | `"-2"` |  |
+| serviceAccount.name | string | `""` |  |
+| sidekiq.redisClientUrl | string | `"redis://match-redis:6379/0"` |  |
+| sidekiq.redisServerUrl | string | `"redis://match-redis:6379/0"` |  |
+| smtp.enabled | bool | `false` |  |
+| smtp.secret.name | string | `"smtp-secrets"` |  |
+| storage.local.createLocalStorageClass | bool | `false` |  |
+| storage.local.enabled | bool | `false` |  |
+| storage.sharedStorage.annotations | object | `{}` |  |
+| storage.sharedStorage.argoSyncWaveAnnotations."argocd.argoproj.io/sync-wave" | string | `"-1"` |  |
+| storage.sharedStorage.claimName | string | `"match-shared-storage"` |  |
+| storage.sharedStorage.enabled | bool | `true` |  |
+| storage.sharedStorage.size | string | `"100Gi"` |  |
+| storage.sharedStorage.storageClassName | string | `""` |  |
+| storage.tmpStorage.enabled | bool | `true` |  |
+| storage.tmpStorage.path | string | `"/tmp/app_tmp"` |  |
+| tolerations | list | `[]` |  |
+| useArgoSyncWaveAnnotations | bool | `false` |  |
+| volumeMounts | list | `[]` |  |
+| volumes | list | `[]` |  |
+| webServers.livenessProbe.timeoutSeconds | int | `5` |  |
+| webServers.port | int | `3000` |  |
+| webServers.railsMaxThreads | int | `15` |  |
+| webServers.readinessProbe.timeoutSeconds | int | `5` |  |
+| webServers.replicas | int | `1` |  |
+| webServers.resources.limits.memory | string | `"1.5Gi"` |  |
+| webServers.resources.requests.cpu | int | `1` |  |
+| webServers.resources.requests.memory | string | `"1Gi"` |  |
+| workers.fingerprinter.dbFollowerPoolSize | int | `1` |  |
+| workers.fingerprinter.dbPoolSize | int | `1` |  |
+| workers.fingerprinter.fingerprinter.enabled | bool | `true` |  |
+| workers.fingerprinter.fingerprinter.port | int | `6000` |  |
+| workers.fingerprinter.fingerprinter.requests.cpu | int | `3` |  |
+| workers.fingerprinter.fingerprinter.requests.memory | string | `"1Gi"` |  |
+| workers.fingerprinter.queues[0].name | string | `"video_match_frames_native_fingerprint_tasks"` |  |
+| workers.fingerprinter.queues[0].priority | int | `1` |  |
+| workers.fingerprinter.replicas | int | `1` |  |
+| workers.fingerprinter.resources.requests.cpu | string | `"50m"` |  |
+| workers.fingerprinter.resources.requests.memory | string | `"1Gi"` |  |
+| workers.fingerprinter.sidekiqConcurrency | int | `1` |  |
+| workers.fingerprinter.sidekiqTimeout | int | `600` |  |
+| workers.generic.queues[0].name | string | `"generic_queue"` |  |
+| workers.generic.queues[0].priority | int | `1` |  |
+| workers.generic.queues[1].name | string | `"generic_queue2"` |  |
+| workers.generic.queues[1].priority | int | `2` |  |
+| workers.generic.replicas | int | `1` |  |
+| workers.generic.resources.requests.cpu | string | `"100m"` |  |
+| workers.generic.resources.requests.memory | string | `"128Mi"` |  |
+| workers.generic.sidekiqConcurrency | int | `5` |  |
+| workers.generic.sidekiqTimeout | int | `25` |  |
+| workers.ingest.queues[0].name | string | `"slow_queue"` |  |
+| workers.ingest.queues[0].priority | int | `1` |  |
+| workers.ingest.replicas | int | `1` |  |
+| workers.ingest.resources.requests.cpu | string | `"100m"` |  |
+| workers.ingest.resources.requests.memory | string | `"128Mi"` |  |
+| workers.ingest.sidekiqConcurrency | int | `5` |  |
+| workers.ingest.sidekiqTimeout | int | `25` |  |
+| workers.process.queues[0].name | string | `"fast_queue"` |  |
+| workers.process.queues[0].priority | int | `1` |  |
+| workers.process.replicas | int | `1` |  |
+| workers.process.resources.requests.cpu | string | `"100m"` |  |
+| workers.process.resources.requests.memory | string | `"128Mi"` |  |
+| workers.process.sidekiqConcurrency | int | `5` |  |
+| workers.process.sidekiqTimeout | int | `25` |  |

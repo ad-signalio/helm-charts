@@ -25,7 +25,7 @@ spec:
           # involuntary disruptions, such as SPOT instance replacements are still possible.
           karpenter.sh/do-not-disrupt: "true"
       spec:
-        terminationGracePeriodSeconds: {{ $.Values.kedaAutoScaling.terminationGracePeriod }}
+        terminationGracePeriodSeconds: {{ $.Values.kedaAutoScaling.terminationGracePeriodSeconds }}
         serviceAccountName: {{ include "match.serviceAccountName" $ }}
         restartPolicy: Never
         {{- with $job.affinity }}

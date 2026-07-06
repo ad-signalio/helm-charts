@@ -67,10 +67,43 @@
       key: ingest_credential_encryption_key
 - name: S3_PRIMARY_BUCKET
   value: "{{ .Values.s3.primaryBucket | default "adsignal-primary-bucket" }}"
-- name: S3_REGION
+- name: COMPATIBLE_S3_REGION
   value: "{{ .Values.s3.region | default "us-east-1" }}"
 - name: AWS_REGION
   value: "{{ .Values.s3.region | default "us-east-1" }}"
+{{- if .Values.s3.compatibleEndpoint }}
+{{- /* Internal pod→storage URL for S3-compatible backends (Ceph, GCS, MinIO, etc.).
+       Points Active Storage and S3CompatibleCredential at the storage API.
+       Leave empty on AWS — IRSA and the default S3 endpoint are used. */}}
+- name: COMPATIBLE_ENDPOINT_URL_S3
+  value: "{{ .Values.s3.compatibleEndpoint }}"
+{{- end }}
+{{- if .Values.s3.compatiblePublicEndpoint }}
+{{- /* Browser-reachable URL for presigned URLs. Set when the internal endpoint is a
+       cluster-DNS name unreachable by browsers (e.g. on-prem Ceph behind MetalLB). */}}
+- name: COMPATIBLE_PUBLIC_ENDPOINT_URL_S3
+  value: "{{ .Values.s3.compatiblePublicEndpoint }}"
+{{- end }}
+{{- if .Values.s3.compatibleForcePathStyle }}
+- name: COMPATIBLE_S3_FORCE_PATH_STYLE
+  value: "{{ .Values.s3.compatibleForcePathStyle }}"
+{{- end }}
+{{- if .Values.s3.compatibleCredentialsSecret }}
+{{- /* HMAC creds for the S3-compatible backend. AWS leaves this empty (uses IRSA).
+       Key names default to access_key_id / secret_access_key (ESO convention).
+       Override compatibleAccessKeyField / compatibleSecretKeyField for secrets that
+       use different key names (e.g. Rook OBC secrets use AWS_ACCESS_KEY_ID). */}}
+- name: COMPATIBLE_S3_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.s3.compatibleCredentialsSecret }}
+      key: {{ .Values.s3.compatibleAccessKeyField | default "access_key_id" }}
+- name: COMPATIBLE_S3_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.s3.compatibleCredentialsSecret }}
+      key: {{ .Values.s3.compatibleSecretKeyField | default "secret_access_key" }}
+{{- end }}
   {{- if .Values.domain }}
 - name: ADSIGNAL_BASE_DOMAIN
   value: {{ .Values.domain }}
@@ -217,6 +250,12 @@
 {{- end }}
 - name: AD_SIGNAL_TMPDIR
   value: {{ .Values.storage.tmpStorage.path }}
+{{- end }}
+{{- if .Values.snicketProtocol }}
+- name: SNICKET_PROTOCOL
+  value: {{ .Values.snicketProtocol | quote }}
+- name: SNICKET_PORT
+  value: {{ .Values.snicketPort | default "80" | quote }}
 {{- end }}
 {{- end }}
 

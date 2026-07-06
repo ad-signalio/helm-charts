@@ -1,0 +1,75 @@
+{{/*
+One-time initial db:prepare Job for fresh installs.
+
+This is a plain Kubernetes Job (not a Helm hook) so it runs alongside all other
+resources when the chart is first installed. An init container waits for postgres
+to accept connections before running `rails db:prepare`, avoiding the race between
+postgres startup and schema creation.
+
+It is NOT rendered when:
+  - useArgoSyncWaveAnnotations is true (ArgoCD uses its own PostSync hook mechanism)
+  - The Job already exists (lookup() guard — prevents re-running on upgrades)
+
+On upgrades the existing db-prepare hook (pre-upgrade) handles migrations.
+*/}}
+{{- if not .Values.useArgoSyncWaveAnnotations }}
+{{- $jobName := printf "rails-initial-db-prepare-%s" (include "match.fullname" .) }}
+{{- if not (lookup "batch/v1" "Job" .Release.Namespace $jobName) }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "match.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-prepare-initial
+spec:
+  ttlSecondsAfterFinished: 86400 # 24 hours — Kubernetes cleans up without Helm deletion watch
+  template:
+    metadata:
+      labels:
+        {{- include "match.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: db-prepare-initial
+    spec:
+      serviceAccountName: {{ include "match.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-postgres
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until PGPASSWORD="$DB_PASSWORD" psql -h "$DB_PRIMARY_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -c "SELECT 1" > /dev/null 2>&1; do
+                echo "waiting for postgres at $DB_PRIMARY_HOST..."
+                sleep 3
+              done
+          env:
+           {{- include "match.envVars" . | nindent 12 }}
+      containers:
+        - name: rails-db-prepare
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          args: ["bin/rails", "db:prepare"]
+          env:
+           {{- include "match.envVars" . | nindent 12 }}
+           {{- include "match.owningUserEnvVars" . | nindent 12 }}
+          volumeMounts:
+           {{- include "match.volumeMounts" . | nindent 12 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        {{- include "match.volumes" . | nindent 8 }}
+{{- end }}
+{{- end }}

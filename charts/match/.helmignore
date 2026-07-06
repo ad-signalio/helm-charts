@@ -23,3 +23,9 @@
 .vscode/
 # Internal Development Files and tools
 internal/
+# helm-docs template — source only, not part of the chart package
+README.md.gotmpl
+docs/
+.github/
+.githooks/
+.claude/

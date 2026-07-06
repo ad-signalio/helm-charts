@@ -152,7 +152,8 @@
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
-            "path": { "type": "string" }
+            "path": { "type": "string" },
+            "sizeLimit": { "type": "string" }
           }
         }
       }
@@ -302,9 +303,12 @@
       "required": ["type", "port"],
       "properties": {
         "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
-        "port": { "type": "integer" }
+        "port": { "type": "integer" },
+        "annotations": { "type": "object" }
       }
     },
+    "snicketProtocol": { "type": "string" },
+    "snicketPort": { "type": "string" },
     "ingress": {
       "type": "object",
       "required": ["enabled"],
@@ -322,6 +326,25 @@
             "loadBalancerAttributes": { "type": "array" }
           }
         }
+      }
+    },
+    "httpRoute": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "annotations": { "type": "object" },
+        "parentRefs": { "type": "array" },
+        "hostnames": { "type": "array" },
+        "rules": { "type": "array" }
+      }
+    },
+    "gke": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "healthCheckPath": { "type": "string" }
       }
     },
     "nodeSelector": { "type": "object" },
@@ -369,7 +392,13 @@
         "primaryBucket": { "type": "string", "minLength": 1 },
         "accessKeyId": { "type": "string" },
         "secretAccessKey": { "type": "string" },
-        "region": { "type": "string", "minLength": 1 }
+        "region": { "type": "string", "minLength": 1 },
+        "compatibleEndpoint": { "type": "string" },
+        "compatiblePublicEndpoint": { "type": "string" },
+        "compatibleCredentialsSecret": { "type": "string" },
+        "compatibleAccessKeyField": { "type": "string" },
+        "compatibleSecretKeyField": { "type": "string" },
+        "compatibleForcePathStyle": { "type": "string", "enum": ["", "true", "false"] }
       }
     },
     "domain": { "type": "string", "minLength": 1 },
@@ -378,6 +407,12 @@
       "required": ["enabled"],
       "properties": {
         "enabled": { "type": "boolean" },
+        "logging": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
         "matchDashboards": {
           "type": "object",
           "properties": {

@@ -23,7 +23,7 @@ spec:
         enableTLS: "{{ $.Values.kedaAutoScaling.redis.enabledTLS }}"
         port: "{{ $.Values.kedaAutoScaling.redis.port }}"
       {{- if not $.Values.kedaAutoScaling.redis.authenticationRef.enabled }}
-        address: {{ $.Values.sidekiq.redisServerUrl }}
+        address: {{ include "match.kedaRedisAddress" $ }}
       {{- else }}
       authenticationRef:
         name: {{ $.Values.kedaAutoScaling.redis.authenticationRef.name }}

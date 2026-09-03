@@ -1,0 +1,39 @@
+{{- /*
+  README-generated.md.gotmpl — helm-docs template for this chart.
+
+  DO NOT edit README-generated.md directly. It is auto-generated from:
+    - docs/README.md       — manual narrative content (edit this)
+    - values.yaml          — generates the Values table below
+    - Chart.yaml           — provides chart metadata
+
+  To regenerate locally:
+    make docs
+
+  Use 'make docs', not a bare 'helm-docs' — the bare command uses helm-docs'
+  own defaults and would overwrite the hand-written README.md front page.
+
+  CI regenerates this file on pull requests if it is out of date, pushes the
+  result to the PR branch, and fails that run so the change is reviewed.
+  This file is published to Freshservice and synced to the public helm-charts
+  repo as charts/match/README.md.
+*/ -}}
+<!---
+title: Match Self Hosted Helm Chart
+folder: "Technical Documentation"
+status: 2
+-->
+<!-- AUTO-GENERATED — do not edit. Source: docs/README.md + README-generated.md.gotmpl. Regenerate with: make docs -->
+
+{{ template "chart.versionBadge" . }}{{ template "chart.typeBadge" . }}{{ template "chart.appVersionBadge" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ .Files.Get "docs/README.md" }}
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.valuesSection" . }}

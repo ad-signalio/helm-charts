@@ -40,6 +40,8 @@ spec:
       {{- if $worker.fingerprinter }}
       shareProcessNamespace: true
       {{- end }}
+      initContainers:
+        {{- include "match.waitForSchema" $ | nindent 8 }}
       containers:
         - name: sidekiq-worker
           {{- with $.Values.securityContext }}

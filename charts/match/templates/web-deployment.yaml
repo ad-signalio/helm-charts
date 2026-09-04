@@ -31,6 +31,8 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        {{- include "match.waitForSchema" . | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
           {{- with .Values.securityContext }}

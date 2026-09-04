@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: rails-seed-job-{{ .Release.Revision }}
-  namespace: match
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "match.labels" . | nindent 4 }}
     app.kubernetes.io/component: db-seed
@@ -16,6 +16,7 @@ metadata:
     {{- toYaml .Values.dbSeedJob.helmHookAnnotations | nindent 4 }}
     {{- end }}
 spec:
+  ttlSecondsAfterFinished: 86400 # 24 hours — Kubernetes cleans up without Helm deletion watch
   template:
     metadata:
       labels:
@@ -41,7 +42,9 @@ spec:
            {{- include "match.owningUserEnvVars" . | nindent 12 }}
           volumeMounts:
            {{- include "match.volumeMounts" . | nindent 12 }}
+      {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
         {{- include "match.volumes" . | nindent 8 }}

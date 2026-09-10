@@ -1,0 +1,17 @@
+# these are placeholder values. Please replace with your own values before installing the chart.
+apiSecretName: match-reference-architecture-secrets # output of terraform is api_secret_name
+rdsPgSecretName: match-reference-architecture-rds-pg # output of terraform is rds_pg_secret_name
+clusterName: match-reference-architecture # output of terraform is eks_cluster_details.cluster_name
+userSecretName: match-reference-architecture-owning-user-credentials # output of terraform is user_secret_name
+secretStoreRoleArn: arn:aws:iam::123456789012:role/match-secrets-role # output of terraform is secret_store_role_arn
+redisSecretName: match-reference-architecture-redis # output of terraform is redis_secret_name
+smtp:
+  enabled: false
+  smtpSecretName: match-reference-architecture-smtp # output of terraform is smtp_secret_name if enabled.
+
+k8sSecretNames:
+  rdsPg: match-postgres-credentials # name of the Kubernetes secret created for RDS credentials
+
+secretSyncer:
+  enabled: true
+  image: public.ecr.aws/docker/library/busybox:1.36

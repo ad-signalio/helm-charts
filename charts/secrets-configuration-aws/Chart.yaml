@@ -1,0 +1,5 @@
+apiVersion: v2
+name: secrets-configuration-aws
+description: A Helm chart to configure secrets for the Snicket Labs Match Reference Architecture. Depends on EKS ASCP and AWS Secrets Manager. 
+type: application
+version: 0.1.0

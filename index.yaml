@@ -497,4 +497,28 @@ entries:
     urls:
     - https://github.com/ad-signalio/helm-charts/releases/download/adsignal-match-0.1.0/adsignal-match-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-04T08:29:01.229866634Z"
+  secrets-configuration-aws:
+  - apiVersion: v2
+    created: "2026-09-10T10:01:21.759793743Z"
+    description: A Helm chart to configure secrets for the Snicket Labs Match Reference
+      Architecture. Depends on EKS ASCP and AWS Secrets Manager.
+    digest: 870d11811d7bc64e9655385d35a15d78e267079a3c289afdffd942c914f79edd
+    name: secrets-configuration-aws
+    type: application
+    urls:
+    - https://github.com/ad-signalio/helm-charts/releases/download/secrets-configuration-aws-0.1.0/secrets-configuration-aws-0.1.0.tgz
+    version: 0.1.0
+  secrets-configuration-gcp:
+  - apiVersion: v2
+    created: "2026-09-10T10:01:21.904417293Z"
+    description: ESO-based secrets configuration for the Snicket Labs Match Reference
+      Architecture (GCP). Syncs GCP Secret Manager secrets into native Kubernetes
+      Secrets via External Secrets Operator + Workload Identity. The ESO operator
+      itself is installed separately (tf-dt-external-secrets).
+    digest: d2131997879c7323d015416b648696fe68f2ffc1c42964e08c08c91c9a59f3b5
+    name: secrets-configuration-gcp
+    type: application
+    urls:
+    - https://github.com/ad-signalio/helm-charts/releases/download/secrets-configuration-gcp-0.1.0/secrets-configuration-gcp-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-09-10T10:01:21.904456577Z"

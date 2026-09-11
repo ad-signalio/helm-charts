@@ -1,5 +1,13 @@
 # Upgrade Notes
 
+## 3.1.1
+
+No manual steps are required.
+
+The sidekiq workers now invoke `/app/bin/bundle` instead of
+`/usr/local/bin/bundle`. Every supported image contains it, so this works
+with whatever tag you are currently running.
+
 ## 3.1.0
 
 No manual steps are required. This release changes worker resource defaults and

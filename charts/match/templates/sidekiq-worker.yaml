@@ -56,7 +56,7 @@ spec:
               value: "127.0.0.1:6000" # Use 127.0.0.1 to ensure IPv4 localhost is used.
             {{- end }}
           args:
-            - /usr/local/bin/bundle
+            - /app/bin/bundle
             - exec
             - sidekiq
             - "-c"

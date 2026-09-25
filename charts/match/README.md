@@ -5,7 +5,7 @@ status: 2
 -->
 <!-- AUTO-GENERATED — do not edit. Source: docs/README.md + README-generated.md.gotmpl. Regenerate with: make docs -->
 
-![Version: 3.1.0](https://img.shields.io/badge/Version-3.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.0](https://img.shields.io/badge/AppVersion-2.0.0-informational?style=flat-square)
+![Version: 4.0.0](https://img.shields.io/badge/Version-4.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 3.0.0](https://img.shields.io/badge/AppVersion-3.0.0-informational?style=flat-square)
 
 Snicket Labs Match Self Hosted
 
@@ -423,6 +423,49 @@ spec:
 ```
 
 This approach keeps Redis credentials separate and allows different authentication for KEDA vs. application access.
+
+### Postgres Connection Configuration (GoodJob)
+
+> `queueAdapter: good_job` requires the app image to have cut over from Sidekiq to GoodJob. Do not enable this until your image supports it.
+
+When `queueAdapter: good_job`, KEDA polls the `good_jobs` table directly (via a `postgresql`-type trigger) instead of a Redis list. This needs a dedicated, read-only Postgres role — not your application's own DB user — so KEDA's blast radius is limited to counting rows in `good_jobs`.
+
+**Automatic setup (default: `kedaAutoScaling.postgres.autoCreateRole: true`)**
+
+A Job runs on install/upgrade that creates (or converges) a `db_keda_ro` role and grants it `SELECT` on `good_jobs` only — never broader access like `pg_read_all_data`. The role's password is generated once and stored in a Secret that's stable across upgrades.
+
+This never fails your install or upgrade: if your Postgres user doesn't have `CREATEROLE` (common if you supply your own Postgres — see below), the Job logs a warning and exits successfully. Check the Job's logs (`app.kubernetes.io/component: keda-postgres-role`) if KEDA scaling doesn't come up after enabling `good_job` — if it couldn't create the role automatically, use the manual setup below.
+
+**Manual setup**
+
+If you're supplying your own Postgres (BYOP) and prefer to manage this yourself, set `autoCreateRole: false` and run:
+
+```sql
+CREATE ROLE db_keda_ro LOGIN PASSWORD 'choose-a-strong-password';
+GRANT CONNECT ON DATABASE your_database_name TO db_keda_ro;
+GRANT USAGE ON SCHEMA public TO db_keda_ro;
+GRANT SELECT ON good_jobs TO db_keda_ro;
+```
+
+Then create the Secret and point the chart at it:
+
+```bash
+kubectl create secret generic my-keda-postgres-secret \
+  --namespace match \
+  --from-literal=password=choose-a-strong-password
+```
+
+```yaml
+kedaAutoScaling:
+  enabled: true
+  postgres:
+    autoCreateRole: false
+    dbUser: db_keda_ro    # or your own role name
+    authenticationRef:
+      secretName: my-keda-postgres-secret
+```
+
+If your Postgres host isn't resolvable from `postgres.primaryHost` or the bundled subchart (for example, you use `postgres.dbPrimaryHostSecret`), also set `kedaAutoScaling.postgres.host` explicitly — KEDA needs a literal host string at render time and can't read one from a Secret the way application env vars can.
 
 ### Worker Types
 
@@ -915,7 +958,7 @@ aws eks update-kubeconfig --region <your-region> --name <your-cluster-name>
 
 **2. Create the two manually-provisioned AWS Secrets Manager secrets**
 
-These are not created by Terraform and must exist before installing the `secrets-configuration` chart:
+These are not created by Terraform, and must exist before the secrets are synced — whichever way you do it:
 
 ```bash
 # Honeybadger API key (provided to you by Snicket Labs)
@@ -941,12 +984,22 @@ aws secretsmanager create-secret \
   --secret-string '{"auths":{"registry.snicketlabs.io":{"password":"<your-access-token>"}}}'
 ```
 
-**3. Install the `secrets-configuration` chart**
+**3. Sync the secrets from AWS Secrets Manager**
 
-This syncs all required Kubernetes secrets from AWS Secrets Manager into the cluster. Run from your infrastructure directory — all values come directly from Terraform outputs:
+**Using the reference architecture Terraform? This is already done** — its
+`tf-dt-eks-secret-provider-classes` module installs the chart for you and feeds
+it the secret names from Terraform's own outputs. Skip to step 4.
+
+**If you are not, you need either this chart or to create the Kubernetes Secrets
+yourself** — see *Option B — Manual secret creation* under Postgres below for
+what they have to contain. To use the chart, run from your infrastructure
+directory:
 
 ```bash
-helm install secrets-configuration <path-to-reference-architecture>/optional-add-ons/secrets-configuration \
+helm repo add adsignal https://ad-signalio.github.io/helm-charts
+helm repo update
+
+helm install secrets-configuration adsignal/secrets-configuration-aws \
   -n match --create-namespace \
   --set clusterName=$(terraform output -json eks_cluster_details | jq -r '.cluster_name') \
   --set apiSecretName=$(terraform output -raw api_secret_name) \
@@ -956,7 +1009,7 @@ helm install secrets-configuration <path-to-reference-architecture>/optional-add
   --set redisSecretName=$(terraform output -raw redis_secret_name)
 ```
 
-The secrets (`match-api-secrets`, `match-postgres-password`, `match-owning-user-credentials`, `honeybadger-api-key`) are synced from AWS Secrets Manager when the match pods first mount their CSI volumes — they will not appear in `kubectl get secrets` until after the chart is installed and pods start.
+The secrets (`match-api-secrets`, `match-postgres-credentials`, `match-owning-user-credentials`, `honeybadger-api-key`) are created by the chart's own syncer pod, which exists only to mount the CSI volumes and force the driver to write them. They will not appear in `kubectl get secrets` until that pod is running, so it needs schedulable compute — and if it is later scaled to zero, rotations in Secrets Manager stop propagating.
 
 **4. Create the image pull secret**
 
@@ -973,14 +1026,14 @@ The main `image.tag` defaults to the chart's `appVersion` if not set. Override i
 ```yaml
 # image.tag is optional — omit to use the chart's appVersion
 image:
-  repository: registry.snicketlabs.io/snicketlabs/match
-  # tag: 2.0.0  # uncomment to override appVersion
+  repository: registry.snicketlabs.io/snicketlabs/platform
+  # tag: 3.0.0  # uncomment to override appVersion
 
 # fingerprinter.image.tag must be set explicitly
 fingerprinter:
   image:
-    repository: registry.snicketlabs.io/snicketlabs/match-fp
-    tag: 2.0.0
+    repository: registry.snicketlabs.io/snicketlabs/fingerprinter
+    tag: 3.0.0
 ```
 
 > Don't forget to configure the initial user account. See the [Initial User Configuration](#initial-user-configuration) section above for details.
@@ -1066,13 +1119,16 @@ This chart expects the database password to exist as a Kubernetes secret before 
 
 **Option A — AWS Secrets Manager via ASCP (recommended for reference architecture users)**
 
-If you are using the [match-reference-architecture](https://github.com/ad-signalio/match-reference-architecture) Terraform, the RDS password is automatically stored in AWS Secrets Manager. Install the `secrets-configuration` chart from `optional-add-ons/secrets-configuration` in the reference architecture repo to sync it (and all other required secrets) into the cluster via the AWS Secrets Store CSI Driver:
+Using the [match-reference-architecture](https://github.com/ad-signalio/match-reference-architecture) Terraform, there is nothing to do here: the RDS password is stored in AWS Secrets Manager, and its `tf-dt-eks-secret-provider-classes` module syncs it — and every other required secret — into the cluster via the AWS Secrets Store CSI Driver. GCP uses External Secrets Operator against GCP Secret Manager instead, through the same mechanism.
+
+If you are not using it, you need either this chart or Option B below:
 
 ```bash
-helm install secrets-configuration ./optional-add-ons/secrets-configuration -n match -f your-values.yaml
+helm repo add adsignal https://ad-signalio.github.io/helm-charts
+helm install secrets-configuration adsignal/secrets-configuration-aws -n match -f your-values.yaml
 ```
 
-This chart is what creates `match-postgres-password`, `match-api-secrets`, `match-owning-user-credentials`, and `honeybadger-api-key` as Kubernetes secrets. Without it (or equivalent manual steps below), the match pods will fail to start with `CreateContainerConfigError`.
+This chart is what creates `match-postgres-credentials`, `match-api-secrets`, `match-owning-user-credentials`, and `honeybadger-api-key` as Kubernetes secrets. Without it (or equivalent manual steps below), the match pods will fail to start with `CreateContainerConfigError`.
 
 **Option B — Manual secret creation**
 
@@ -1172,7 +1228,7 @@ storage:
 - [ ] kubeconfig updated (`aws eks update-kubeconfig`)
 - [ ] `match-honeybadger-secret` created in AWS Secrets Manager
 - [ ] `match-docker-secret` created in AWS Secrets Manager
-- [ ] `secrets-configuration` chart installed (syncs k8s secrets from AWS Secrets Manager)
+- [ ] Kubernetes secrets synced from AWS Secrets Manager — automatic with the reference architecture, otherwise install `secrets-configuration-aws` yourself
 - [ ] `matchcredentials` image pull secret created in the `match` namespace
 
 ### Values configuration
@@ -1312,8 +1368,8 @@ Use this checklist to ensure you've replaced more temporary measures with produc
 | extraEnvSecrets | list | `[]` |  |
 | extraEnvs | list | `[]` |  |
 | fingerPrinterDebug | bool | `false` |  |
-| fingerprinter.image.repository | string | `"registry.snicketlabs.io/snicketlabs/match-fp"` |  |
-| fingerprinter.image.tag | string | `"2.0.1"` |  |
+| fingerprinter.image.repository | string | `"registry.snicketlabs.io/snicketlabs/fingerprinter"` |  |
+| fingerprinter.image.tag | string | `"3.0.0"` |  |
 | fullnameOverride | string | `"adsignal-match"` |  |
 | gke.enabled | bool | `false` |  |
 | gke.healthCheckPath | string | `"/up"` |  |
@@ -1328,7 +1384,7 @@ Use this checklist to ensure you've replaced more temporary measures with produc
 | httpRoute.rules[0].matches[0].path.type | string | `"PathPrefix"` |  |
 | httpRoute.rules[0].matches[0].path.value | string | `"/"` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
-| image.repository | string | `"registry.snicketlabs.io/snicketlabs/match"` |  |
+| image.repository | string | `"registry.snicketlabs.io/snicketlabs/platform"` |  |
 | image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
 | ingress.annotations | object | `{}` |  |
@@ -1342,6 +1398,17 @@ Use this checklist to ensure you've replaced more temporary measures with produc
 | ingress.ingressClassParams.scheme | string | `"internet-facing"` |  |
 | ingress.tls | list | `[]` |  |
 | kedaAutoScaling.enabled | bool | `false` |  |
+| kedaAutoScaling.postgres.authenticationRef.name | string | `"keda-trigger-auth-postgres"` |  |
+| kedaAutoScaling.postgres.authenticationRef.secretKey | string | `"password"` |  |
+| kedaAutoScaling.postgres.authenticationRef.secretName | string | `""` |  |
+| kedaAutoScaling.postgres.autoCreateRole | bool | `true` |  |
+| kedaAutoScaling.postgres.dbName | string | `""` |  |
+| kedaAutoScaling.postgres.dbUser | string | `""` |  |
+| kedaAutoScaling.postgres.host | string | `""` |  |
+| kedaAutoScaling.postgres.pollingInterval | int | `30` |  |
+| kedaAutoScaling.postgres.port | int | `5432` |  |
+| kedaAutoScaling.postgres.roleName | string | `"db_keda_ro"` |  |
+| kedaAutoScaling.postgres.sslmode | string | `"require"` |  |
 | kedaAutoScaling.redis.authenticationRef.enabled | bool | `false` |  |
 | kedaAutoScaling.redis.authenticationRef.name | string | `"keda-trigger-auth-redis"` |  |
 | kedaAutoScaling.redis.databaseIndex | int | `0` |  |
@@ -1378,6 +1445,7 @@ Use this checklist to ensure you've replaced more temporary measures with produc
 | postgres.primary.resources.limits.memory | string | `"512Mi"` |  |
 | postgres.primary.resources.requests.cpu | string | `"100m"` |  |
 | postgres.primary.resources.requests.memory | string | `"256Mi"` |  |
+| queueAdapter | string | `"sidekiq"` |  |
 | railsConsole.enabled | bool | `false` |  |
 | railsConsole.replicas | int | `1` |  |
 | railsConsole.resources.limits.memory | string | `"1Gi"` |  |

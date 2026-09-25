@@ -1,0 +1,86 @@
+{{/*
+One-time initial KEDA read-only Postgres role setup for fresh installs.
+
+Mirrors db-prepare-initial.yaml: a plain Kubernetes Job (not a Helm hook) so it
+runs alongside all other resources on first install, with an init container
+that waits for postgres before running. On upgrades the pre-upgrade hook
+(keda-postgres-role-creation-job.yaml) handles it instead.
+
+It is NOT rendered when:
+  - queueAdapter isn't good_job, or kedaAutoScaling isn't enabled, or autoCreateRole is false
+  - useArgoSyncWaveAnnotations is true (ArgoCD uses its own PostSync hook mechanism)
+  - The Job already exists (lookup() guard — prevents re-running on upgrades)
+*/}}
+{{- if and .Values.kedaAutoScaling.enabled (eq .Values.queueAdapter "good_job") .Values.kedaAutoScaling.postgres.autoCreateRole }}
+{{- if not .Values.useArgoSyncWaveAnnotations }}
+{{- $jobName := printf "keda-postgres-role-initial-%s" (include "match.fullname" .) }}
+{{- if not (lookup "batch/v1" "Job" .Release.Namespace $jobName) }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "match.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keda-postgres-role
+spec:
+  ttlSecondsAfterFinished: 86400 # 24 hours — Kubernetes cleans up without Helm deletion watch
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "match.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: keda-postgres-role
+    spec:
+      serviceAccountName: {{ include "match.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-postgres
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until PGPASSWORD="$DB_PASSWORD" psql -h "$DB_PRIMARY_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -c "SELECT 1" > /dev/null 2>&1; do
+                echo "waiting for postgres at $DB_PRIMARY_HOST..."
+                sleep 3
+              done
+          env:
+           {{- include "match.envVars" . | nindent 12 }}
+      containers:
+        - name: keda-postgres-role
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["bin/rails", "runner"]
+          args:
+            - |
+              {{- include "match.kedaPostgresRoleScript" . | nindent 14 }}
+          env:
+            - name: KEDA_RO_ROLE_NAME
+              value: {{ .Values.kedaAutoScaling.postgres.roleName | default "db_keda_ro" }}
+            - name: KEDA_RO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "match.kedaPostgresRoleSecretName" . }}
+                  key: password
+            {{- include "match.envVars" . | nindent 12 }}
+          volumeMounts:
+           {{- include "match.volumeMounts" . | nindent 12 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        {{- include "match.volumes" . | nindent 8 }}
+{{- end }}
+{{- end }}
+{{- end }}

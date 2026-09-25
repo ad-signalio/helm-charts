@@ -1,0 +1,11 @@
+{{- if and .Values.kedaAutoScaling.enabled (eq .Values.queueAdapter "good_job") }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ .Values.kedaAutoScaling.postgres.authenticationRef.name }}
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: {{ include "match.kedaPostgresRoleSecretName" . }}
+      key: {{ .Values.kedaAutoScaling.postgres.authenticationRef.secretKey | default "password" }}
+{{- end }}

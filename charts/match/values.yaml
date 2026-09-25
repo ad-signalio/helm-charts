@@ -60,6 +60,12 @@ owningUser:
 # Set to true to add ArgoCD sync wave annotations instead of Helm hooks - useful when deploying via ArgoCD
 useArgoSyncWaveAnnotations: false
 
+# Which background job backend the app image runs. "good_job" only affects KEDA's
+# scaling triggers here — it does NOT change what the job/worker containers execute.
+# Do not flip this until the app image itself has cut over to GoodJob (sc-22747);
+# until then the containers below still start Sidekiq regardless of this value.
+queueAdapter: sidekiq # sidekiq | good_job
+
 kedaAutoScaling:
   enabled: false
   # The amount of time in seconds your cluster job pods will be allowed to continue
@@ -81,10 +87,38 @@ kedaAutoScaling:
       # - parameter: host
       #   name: secret-containing-redis-url
       #   key: endpoint
+  # Used when queueAdapter: good_job. Polls the good_jobs table directly instead
+  # of a Redis list, mirroring the pattern proven in the Hub SaaS chart
+  # (helm-charts-sas PR #755).
+  postgres:
+    pollingInterval: 30 # seconds
+    sslmode: require
+    # Host is resolved automatically for the bundled postgres subchart or
+    # postgres.primaryHost. Set this explicitly if you use
+    # postgres.dbPrimaryHostSecret instead — KEDA needs a literal host string
+    # at render time, it can't pull one from a Secret the way env vars can.
+    host: ""
+    port: 5432
+    # When true (default), a Job creates/converges a dedicated read-only Postgres
+    # role (roleName) with SELECT on good_jobs only — not pg_read_all_data — and
+    # never fails the install/upgrade if the DB user lacks CREATEROLE (common for
+    # BYOP/onprem). See docs/README.md "Manual KEDA role setup" for the fallback
+    # if your Postgres can't grant that automatically.
+    autoCreateRole: true
+    roleName: db_keda_ro
+    dbUser: "" # defaults to roleName if unset — leave unset unless you're using autoCreateRole: false with your own pre-existing role under a different name
+    dbName: "" # defaults to postgres.auth.database if unset
+    authenticationRef:
+      name: keda-trigger-auth-postgres
+      # Defaults to a generated Secret name (see match.kedaPostgresRoleSecretName)
+      # holding the auto-created role's password. Override only if autoCreateRole
+      # is false and you're supplying your own pre-existing Secret.
+      secretName: ""
+      secretKey: "password"
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: registry.snicketlabs.io/snicketlabs/match
+  repository: registry.snicketlabs.io/snicketlabs/platform
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Image tag for the match app. Defaults to .Chart.AppVersion if not set — override here
@@ -93,8 +127,8 @@ image:
 
 fingerprinter:
   image:
-    repository: registry.snicketlabs.io/snicketlabs/match-fp
-    tag: 2.0.1
+    repository: registry.snicketlabs.io/snicketlabs/fingerprinter
+    tag: 3.0.0
 
 # Enable verbose debug logging on the fingerprinter sidecar (Rust + GStreamer).
 # Sets RUST_LOG=debug and GST_DEBUG=*:5 on the fingerprinter init container.

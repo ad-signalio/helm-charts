@@ -54,6 +54,7 @@
       }
     },
     "useArgoSyncWaveAnnotations": { "type": "boolean" },
+    "queueAdapter": { "type": "string", "enum": ["sidekiq", "good_job"] },
     "kedaAutoScaling": {
       "type": "object",
       "required": ["enabled"],
@@ -72,6 +73,27 @@
               "properties": {
                 "enabled": { "type": "boolean" },
                 "name": { "type": "string" }
+              }
+            }
+          }
+        },
+        "postgres": {
+          "type": "object",
+          "properties": {
+            "pollingInterval": { "type": "integer" },
+            "sslmode": { "type": "string" },
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "autoCreateRole": { "type": "boolean" },
+            "roleName": { "type": "string" },
+            "dbUser": { "type": "string" },
+            "dbName": { "type": "string" },
+            "authenticationRef": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "secretName": { "type": "string" },
+                "secretKey": { "type": "string" }
               }
             }
           }

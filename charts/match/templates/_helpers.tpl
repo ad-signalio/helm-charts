@@ -211,3 +211,92 @@ generic-worker unable to scale.
 {{- define "match.kedaRedisAddress" -}}
 {{- .Values.sidekiq.redisServerUrl | trimPrefix "rediss://" | trimPrefix "redis://" -}}
 {{- end }}
+
+{{/*
+Postgres host for KEDA's postgresql scaler trigger metadata (queueAdapter: good_job).
+
+KEDA needs a literal host string at template-render time — there's no secretRef
+indirection for this field the way there is for the password. That's fine for the
+bundled subchart or a plain postgres.primaryHost, but breaks down for
+postgres.dbPrimaryHostSecret (host only known at pod runtime): use
+kedaAutoScaling.postgres.host as an explicit override in that case.
+*/}}
+{{- define "match.kedaPostgresHost" -}}
+{{- if .Values.kedaAutoScaling.postgres.host -}}
+{{- .Values.kedaAutoScaling.postgres.host -}}
+{{- else if .Values.postgres.enabled -}}
+{{- .Values.postgres.fullnameOverride | default (printf "%s-postgres" (include "match.fullname" .)) -}}
+{{- else -}}
+{{- .Values.postgres.primaryHost -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Default name of the Secret holding the auto-created KEDA read-only Postgres
+role's password (queueAdapter: good_job, kedaAutoScaling.postgres.autoCreateRole).
+Deployers using their own pre-existing role/secret (e.g. autoCreateRole: false)
+override this via kedaAutoScaling.postgres.authenticationRef.secretName instead.
+*/}}
+{{- define "match.kedaPostgresRoleSecretName" -}}
+{{- .Values.kedaAutoScaling.postgres.authenticationRef.secretName | default (printf "%s-keda-postgres-ro" (include "match.fullname" .)) -}}
+{{- end }}
+
+{{/*
+Password for the auto-created KEDA read-only Postgres role. Looks up any existing
+Secret first, mirroring match.owningUserPassword, so the password — and therefore
+the DB role itself — stays stable across upgrades instead of rotating every deploy.
+*/}}
+{{- define "match.kedaPostgresRolePassword" -}}
+{{- $secretName := include "match.kedaPostgresRoleSecretName" . }}
+{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace $secretName }}
+{{- if $existingSecret }}
+{{- index $existingSecret.data "password" | b64dec }}
+{{- else }}
+{{- (printf "%s%s%s%s%s" (randAlpha 12) (randAlpha 8 | upper) (randNumeric 6) "!@#" (randAlpha 4)) | shuffle }}
+{{- end }}
+{{- end }}
+
+{{/*
+Idempotent, least-privilege setup for the KEDA read-only Postgres role.
+
+Runs as `bin/rails runner` so it reuses the app's own DB connection config
+instead of needing a psql client in the image. Grants SELECT on good_jobs only
+(not pg_read_all_data, unlike the CNPG-based Hub SaaS equivalent) — this chart
+ships to third-party self-hosted/onprem customers, so the role's blast radius
+needs to be defensible in a customer security review, not just convenient.
+
+Never fails the Job: a customer's DB user may lack CREATEROLE (common for
+BYOP/onprem Postgres where the customer intentionally scopes the credentials
+they hand over), so every error is caught and logged as a warning instead of
+aborting — a failed helm install/upgrade over this would be worse than KEDA
+autoscaling simply not being configured yet. See docs/README.md for the
+manual fallback.
+*/}}
+{{- define "match.kedaPostgresRoleScript" -}}
+conn = ActiveRecord::Base.connection
+role = ENV.fetch("KEDA_RO_ROLE_NAME")
+password = ENV.fetch("KEDA_RO_PASSWORD")
+db_name = ENV.fetch("DB_DATABASE")
+begin
+  conn.execute("SELECT pg_advisory_lock(hashtext('keda_ro_role_setup'))")
+  exists = conn.select_value("SELECT 1 FROM pg_roles WHERE rolname = #{conn.quote(role)}")
+  if exists
+    conn.execute("ALTER ROLE #{conn.quote_table_name(role)} PASSWORD #{conn.quote(password)}")
+  else
+    conn.execute("CREATE ROLE #{conn.quote_table_name(role)} LOGIN PASSWORD #{conn.quote(password)}")
+  end
+  conn.execute("GRANT CONNECT ON DATABASE #{conn.quote_table_name(db_name)} TO #{conn.quote_table_name(role)}")
+  conn.execute("GRANT USAGE ON SCHEMA public TO #{conn.quote_table_name(role)}")
+  begin
+    conn.execute("GRANT SELECT ON good_jobs TO #{conn.quote_table_name(role)}")
+  rescue => e
+    warn "WARNING: could not grant SELECT on good_jobs (table may not exist yet - will be retried on the next deploy): #{e.message}"
+  end
+  puts "KEDA read-only role '#{role}' is ready."
+rescue => e
+  warn "WARNING: could not create/configure the KEDA read-only Postgres role automatically: #{e.message}"
+  warn "GoodJob KEDA autoscaling will not work until this is created manually - see docs/README.md (Manual KEDA role setup)."
+ensure
+  conn.execute("SELECT pg_advisory_unlock(hashtext('keda_ro_role_setup'))") rescue nil
+end
+{{- end }}

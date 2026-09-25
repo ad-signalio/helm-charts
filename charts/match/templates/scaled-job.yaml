@@ -81,7 +81,7 @@ spec:
             image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
             imagePullPolicy: {{ $.Values.image.pullPolicy }}
             args:
-              - /usr/local/bin/bundle
+              - /app/bin/bundle
               - exec
               - sidekiq
               - "-t"
@@ -148,6 +148,29 @@ spec:
       - "Ready"
       - "PodScheduled"
   maxReplicaCount:  {{ $job.maxReplicaCount }}
+  {{- if eq $.Values.queueAdapter "good_job" }}
+  pollingInterval:  {{ $.Values.kedaAutoScaling.postgres.pollingInterval | default 30 }}
+  triggers:
+    # NOTE: only the scaling trigger switches here — the container above still
+    # runs `sidekiq exec` regardless of queueAdapter. Don't enable good_job
+    # until the app image itself has cut over (sc-22747).
+    - type: postgresql
+      authenticationRef:
+        name: {{ $.Values.kedaAutoScaling.postgres.authenticationRef.name }}
+      metadata:
+        host: {{ include "match.kedaPostgresHost" $ }}
+        port: "{{ $.Values.kedaAutoScaling.postgres.port | default 5432 }}"
+        dbName: {{ $.Values.kedaAutoScaling.postgres.dbName | default $.Values.postgres.auth.database }}
+        userName: {{ $.Values.kedaAutoScaling.postgres.dbUser | default $.Values.kedaAutoScaling.postgres.roleName | default "db_keda_ro" }}
+        sslmode: {{ $.Values.kedaAutoScaling.postgres.sslmode | default "require" }}
+        query: >-
+          SELECT COUNT(1)
+          FROM good_jobs
+          WHERE finished_at IS NULL
+            AND scheduled_at < NOW()
+            AND queue_name = '{{ $job.goodJobQueue | default $job.sideKiqQueue }}'
+        targetQueryValue: "1"
+  {{- else }}
   pollingInterval:  {{ $.Values.kedaAutoScaling.redis.pollingInterval | default 10 }}
   triggers:
     - type: redis
@@ -163,6 +186,7 @@ spec:
       authenticationRef:
         name: {{ $.Values.kedaAutoScaling.redis.authenticationRef.name }}
       {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

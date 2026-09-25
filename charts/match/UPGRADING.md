@@ -1,5 +1,43 @@
 # Upgrade Notes
 
+## 4.0.0
+
+**The default images change, in both name and version.** If you pin
+`image.tag` and `fingerprinter.image.tag` in your own values, nothing here
+reaches you except the repository paths — check those.
+
+### Image repositories
+
+The chart pointed at two paths that are no longer published. `hub` publishes
+only to `.../platform`, and `.../match-fp` was deliberately never published to
+this registry — that image was only ever on Docker Hub. Tags already pulled keep
+working; a fresh install on a current tag could not pull at all.
+
+| | 3.x | 4.0.0 |
+|---|---|---|
+| `image.repository` | `registry.snicketlabs.io/snicketlabs/match` | `registry.snicketlabs.io/snicketlabs/platform` |
+| `fingerprinter.image.repository` | `registry.snicketlabs.io/snicketlabs/match-fp` | `registry.snicketlabs.io/snicketlabs/fingerprinter` |
+
+### Application version
+
+`appVersion` moves from 2.0.0 to 3.0.0, and the fingerprinter tag from 2.0.1 to
+3.0.0 — the current releases of both. `image.tag` defaults to `.Chart.AppVersion`,
+so an upgrade without an explicit tag moves the platform across a major version.
+Read the Platform 3.0.0 and Fingerprinter 3.0.0 release notes before upgrading a
+live environment.
+
+This is why the chart takes a major bump rather than a minor: nothing in the
+templates is incompatible, but the software it deploys changes major version by
+default.
+
+## 3.1.1
+
+No manual steps are required.
+
+The sidekiq workers now invoke `/app/bin/bundle` instead of
+`/usr/local/bin/bundle`. Every supported image contains it, so this works
+with whatever tag you are currently running.
+
 ## 3.1.0
 
 No manual steps are required. This release changes worker resource defaults and

@@ -1,0 +1,59 @@
+{{- if and .Values.kedaAutoScaling.enabled (eq .Values.queueAdapter "good_job") .Values.kedaAutoScaling.postgres.autoCreateRole }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keda-postgres-role-job-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "match.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keda-postgres-role
+  annotations:
+    {{- if .Values.useArgoSyncWaveAnnotations }}
+    {{- toYaml .Values.dbPrepareJob.argoSyncWaveAnnotations | nindent 4 }}
+    {{- else }}
+    {{- toYaml .Values.dbPrepareJob.helmHookAnnotations | nindent 4 }}
+    {{- end }}
+spec:
+  ttlSecondsAfterFinished: 86400 # 24 hours — Kubernetes cleans up without Helm deletion watch
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "match.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: keda-postgres-role
+    spec:
+      serviceAccountName: {{ include "match.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      containers:
+        - name: keda-postgres-role
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["bin/rails", "runner"]
+          args:
+            - |
+              {{- include "match.kedaPostgresRoleScript" . | nindent 14 }}
+          env:
+            - name: KEDA_RO_ROLE_NAME
+              value: {{ .Values.kedaAutoScaling.postgres.roleName | default "db_keda_ro" }}
+            - name: KEDA_RO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "match.kedaPostgresRoleSecretName" . }}
+                  key: password
+            {{- include "match.envVars" . | nindent 12 }}
+          volumeMounts:
+           {{- include "match.volumeMounts" . | nindent 12 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        {{- include "match.volumes" . | nindent 8 }}
+{{- end }}

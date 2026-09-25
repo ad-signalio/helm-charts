@@ -10,6 +10,34 @@ spec:
     name: {{ $name }}-worker-{{ include "match.fullname" $ }}
   minReplicaCount: {{ $worker.minReplicaCount | default 0 }}
   maxReplicaCount: {{ $worker.maxReplicaCount }}
+  {{- if eq $.Values.queueAdapter "good_job" }}
+  pollingInterval:  {{ $worker.pollingInterval | default $.Values.kedaAutoScaling.postgres.pollingInterval | default 30 }}
+  cooldownPeriod: {{ $worker.cooldownPeriod | default 300 }}
+  triggers:
+    # NOTE: only the scaling trigger switches here — the Deployment below still
+    # runs `sidekiq exec` regardless of queueAdapter. Don't enable good_job
+    # until the app image itself has cut over (sc-22747).
+    - type: postgresql
+      authenticationRef:
+        name: {{ $.Values.kedaAutoScaling.postgres.authenticationRef.name }}
+      metadata:
+        host: {{ include "match.kedaPostgresHost" $ }}
+        port: "{{ $.Values.kedaAutoScaling.postgres.port | default 5432 }}"
+        dbName: {{ $.Values.kedaAutoScaling.postgres.dbName | default $.Values.postgres.auth.database }}
+        userName: {{ $.Values.kedaAutoScaling.postgres.dbUser | default $.Values.kedaAutoScaling.postgres.roleName | default "db_keda_ro" }}
+        sslmode: {{ $.Values.kedaAutoScaling.postgres.sslmode | default "require" }}
+        {{- $queueNames := list }}
+        {{- range $queue := $worker.queues }}
+        {{- $queueNames = append $queueNames $queue.name }}
+        {{- end }}
+        query: >-
+          SELECT COUNT(1)
+          FROM good_jobs
+          WHERE finished_at IS NULL
+            AND scheduled_at < NOW()
+            AND queue_name IN ('{{ $queueNames | join "','" }}')
+        targetQueryValue: "10"
+  {{- else }}
   pollingInterval:  {{ $worker.pollingInterval | default $.Values.kedaAutoScaling.redis.pollingInterval | default 10 }}
   cooldownPeriod: {{ $worker.cooldownPeriod | default 300 }}
   triggers:
@@ -29,6 +57,7 @@ spec:
         name: {{ $.Values.kedaAutoScaling.redis.authenticationRef.name }}
       {{- end }}
     {{- end }}
+  {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -83,7 +112,7 @@ spec:
               value: "127.0.0.1:6000" # Use 127.0.0.1 to ensure IPv4 localhost is used.
             {{- end }}
           args:
-            - /usr/local/bin/bundle
+            - /app/bin/bundle
             - exec
             - sidekiq
             - "-c"

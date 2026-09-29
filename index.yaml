@@ -499,6 +499,16 @@ entries:
     version: 0.1.0
   secrets-configuration-aws:
   - apiVersion: v2
+    created: "2026-09-29T12:39:53.713768756Z"
+    description: A Helm chart to configure secrets for the Snicket Labs platform.
+      Depends on EKS ASCP and AWS Secrets Manager.
+    digest: b85da125969e83636cad31d41b4c325f0f6a2841d78af16a9b76e2bfcf4af854
+    name: secrets-configuration-aws
+    type: application
+    urls:
+    - https://github.com/ad-signalio/helm-charts/releases/download/secrets-configuration-aws-0.2.0/secrets-configuration-aws-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
     created: "2026-09-10T10:01:21.759793743Z"
     description: A Helm chart to configure secrets for the Snicket Labs Match Reference
       Architecture. Depends on EKS ASCP and AWS Secrets Manager.
@@ -509,6 +519,18 @@ entries:
     - https://github.com/ad-signalio/helm-charts/releases/download/secrets-configuration-aws-0.1.0/secrets-configuration-aws-0.1.0.tgz
     version: 0.1.0
   secrets-configuration-gcp:
+  - apiVersion: v2
+    created: "2026-09-29T12:39:53.973324992Z"
+    description: ESO-based secrets configuration for the Snicket Labs platform (GCP).
+      Syncs GCP Secret Manager secrets into native Kubernetes Secrets via External
+      Secrets Operator + Workload Identity. The ESO operator itself is installed separately
+      (tf-dt-external-secrets).
+    digest: ba2967844f2f45ec93d474801ebd4aa6b127dde0107235555e40595ec5a142de
+    name: secrets-configuration-gcp
+    type: application
+    urls:
+    - https://github.com/ad-signalio/helm-charts/releases/download/secrets-configuration-gcp-0.2.0/secrets-configuration-gcp-0.2.0.tgz
+    version: 0.2.0
   - apiVersion: v2
     created: "2026-09-10T10:01:21.904417293Z"
     description: ESO-based secrets configuration for the Snicket Labs Match Reference
@@ -521,4 +543,4 @@ entries:
     urls:
     - https://github.com/ad-signalio/helm-charts/releases/download/secrets-configuration-gcp-0.1.0/secrets-configuration-gcp-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-10T10:01:21.904456577Z"
+generated: "2026-09-29T12:39:53.97337703Z"

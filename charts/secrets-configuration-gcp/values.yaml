@@ -1,12 +1,12 @@
 # Placeholder values — replace before installing.
-namespace: match
+# Everything is created in the release namespace (helm -n).
 
-clusterName: match-reference-architecture # used to derive default k8s secret names
+clusterName: my-cluster # used to derive default k8s secret names
 
 refreshInterval: 1h
 
 serviceAccount:
-  name: match-secrets
+  name: secret-sync-sa
   # Cloud-provider IAM annotations for workload identity, e.g.:
   #   GKE: iam.gke.io/gcp-service-account: <GSA email>
   #   EKS: eks.amazonaws.com/role-arn: <IAM role ARN>
@@ -23,9 +23,9 @@ secretStore:
       auth:
         workloadIdentity:
           clusterLocation: us-central1 # GKE cluster location (region or zone)
-          clusterName: match-reference-architecture
+          clusterName: my-cluster
           serviceAccountRef:
-            name: match-secrets
+            name: secret-sync-sa
   # Example for AWS Secrets Manager with IRSA (the SA needs the
   # eks.amazonaws.com/role-arn annotation above):
   # provider:
@@ -35,29 +35,29 @@ secretStore:
   #     auth:
   #       jwt:
   #         serviceAccountRef:
-  #           name: match-secrets
+  #           name: secret-sync-sa
 
 # Secret Manager secret names (Terraform outputs / manually created).
 secretNames:
-  cloudSql: match-reference-architecture-cloud-sql # tf-dt-cloud-sql (gcp) / tf-dt-rds-pg (aws)
-  redis: match-reference-architecture-redis        # tf-dt-memorystore (gcp) / tf-dt-elasticache-redis (aws)
-  api: match-reference-architecture-api-secrets    # gcp/tf-hosted-modules/tf-dt-application-secrets (gcp) / aws/tf-hosted-modules/tf-dt-application-secrets (aws)
-  user: match-reference-architecture-user-password # gcp/tf-hosted-modules/tf-dt-application-secrets (gcp) / aws/tf-hosted-modules/tf-dt-application-secrets (aws)
-  docker: match-docker-secret                      # manually created (gcloud / aws)
-  honeybadger: match-honeybadger-secret            # manually created (gcloud / aws)
+  cloudSql: my-cluster-cloud-sql               # tf-dt-cloud-sql (gcp) / tf-dt-rds-pg (aws)
+  redis: my-cluster-redis                      # tf-dt-memorystore (gcp) / tf-dt-elasticache-redis (aws)
+  api: my-cluster-api-secrets                  # gcp/tf-hosted-modules/tf-dt-application-secrets (gcp) / aws/tf-hosted-modules/tf-dt-application-secrets (aws)
+  user: my-cluster-user-password               # gcp/tf-hosted-modules/tf-dt-application-secrets (gcp) / aws/tf-hosted-modules/tf-dt-application-secrets (aws)
+  docker: snicketlabs-docker-secret            # manually created (gcloud / aws)
+  honeybadger: snicketlabs-honeybadger-secret  # manually created (gcloud / aws)
 
 # k8s Secret names produced. 
 k8sSecretNames:
-  rdsPg: match-postgres-credentials
-  api: match-api-secrets
-  user: match-owning-user-credentials
+  rdsPg: postgres-credentials
+  api: api-secrets
+  user: owning-user-credentials
   redis: "" # empty -> defaults to "<clusterName>-redis" 
   docker: dockerconfig
   honeybadger: honeybadger-api-key
 
 smtp:
   enabled: false
-  secretName: match-reference-architecture-smtp
+  secretName: my-cluster-smtp
   k8sSecretName: smtp-secrets
 
 # GCS S3-interop HMAC creds for Active Storage. GCP-only — on AWS the
@@ -65,5 +65,5 @@ smtp:
 # native GCS + Workload Identity instead.
 gcsS3Interop:
   enabled: true
-  secretName: match-reference-architecture-gcs-hmac # tf-dt-gcs-active-storage hmac_secret_name
-  k8sSecretName: match-s3-credentials               # consumed by helm-match (S3_ACCESS_KEY/S3_SECRET_KEY)
+  secretName: my-cluster-gcs-hmac  # tf-dt-gcs-active-storage hmac_secret_name
+  k8sSecretName: s3-credentials    # consumed by the platform chart (S3_ACCESS_KEY/S3_SECRET_KEY)

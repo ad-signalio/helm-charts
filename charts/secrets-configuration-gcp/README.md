@@ -4,7 +4,7 @@ ESO-based secrets configuration for GCP — the counterpart to `../ascp-support`
 (AWS). Syncs GCP Secret Manager secrets into native Kubernetes Secrets via
 [External Secrets Operator](https://external-secrets.io/), authenticated with
 GKE Workload Identity. Produces the **same Kubernetes Secrets** (names + keys) as
-`ascp-support`, so the Match application deployment is identical on AWS and GCP.
+`ascp-support`, so the platform deployment is identical on AWS and GCP.
 
 ## Prerequisites
 
@@ -17,25 +17,25 @@ GKE Workload Identity. Produces the **same Kubernetes Secrets** (names + keys) a
 3. **The source secrets exist** in GCP Secret Manager:
    - Cloud SQL (`tf-dt-cloud-sql`) and Memorystore (`tf-dt-memorystore`) write theirs.
    - API + owning-user secrets: `tf-dt-application-secrets` (sc-22740).
-   - `match-docker-secret` + `match-honeybadger-secret`: created manually (below).
+   - `snicketlabs-docker-secret` + `snicketlabs-honeybadger-secret`: created manually (below).
 
 ## Prerequisites: manually created secrets (GCP)
 
 The GCP equivalents of the AWS manually-created secrets. GCP Secret Manager
 stores plain string values (no per-secret regions/replication flags like AWS).
 
-1. **Docker registry credentials** — the dockerconfigjson, stored as `match-docker-secret`:
+1. **Docker registry credentials** — the dockerconfigjson, stored as `snicketlabs-docker-secret`:
 
    ```bash
    # $SECRET_JSON is your docker config json (a single-line JSON string)
-   printf '%s' "$SECRET_JSON" | gcloud secrets create match-docker-secret \
+   printf '%s' "$SECRET_JSON" | gcloud secrets create snicketlabs-docker-secret \
      --project "$PROJECT_ID" --data-file=-
    ```
 
-2. **Honeybadger API token** (provided securely by Snicket Labs), stored as `match-honeybadger-secret`:
+2. **Honeybadger API token** (provided securely by Snicket Labs), stored as `snicketlabs-honeybadger-secret`:
 
    ```bash
-   printf '%s' "$HONEYBADGER_API_KEY" | gcloud secrets create match-honeybadger-secret \
+   printf '%s' "$HONEYBADGER_API_KEY" | gcloud secrets create snicketlabs-honeybadger-secret \
      --project "$PROJECT_ID" --data-file=-
    ```
 
@@ -48,9 +48,9 @@ covers reading these alongside the Terraform-created secrets.
 
 - A namespaced **`SecretStore`** (`gcpsm` provider + Workload Identity auth).
 - A **`ServiceAccount`** carrying the `iam.gke.io/gcp-service-account` annotation.
-- **`ExternalSecret`s** producing: `match-postgres-credentials`, `match-api-secrets`,
-  `match-owning-user-credentials`, `<clusterName>-redis`, `dockerconfig`,
-  `honeybadger-api-key`, `match-s3-credentials` (GCS S3-interop HMAC, sc-22742),
+- **`ExternalSecret`s** producing: `postgres-credentials`, `api-secrets`,
+  `owning-user-credentials`, `<clusterName>-redis`, `dockerconfig`,
+  `honeybadger-api-key`, `s3-credentials` (GCS S3-interop HMAC, sc-22742),
   and (optional) `smtp-secrets`.
 
 ## Open reconciliation points (flagged in templates)

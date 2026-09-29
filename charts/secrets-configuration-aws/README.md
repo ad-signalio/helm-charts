@@ -1,10 +1,10 @@
 # Secrets Configuration Helm Chart
 
-This Helm chart configures the [AWS Secrets and Configuration Provider (ASCP)](https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html) for Amazon EKS to manage secrets for the Match application installation.
+This Helm chart configures the [AWS Secrets and Configuration Provider (ASCP)](https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html) for Amazon EKS to manage secrets for the Snicket Labs platform.
 
 ## Overview
 
-The chart creates Kubernetes `SecretProviderClass` resources that integrate with AWS Secrets Manager, allowing the Match application to securely access secrets stored in AWS without embedding them in the application code or Kubernetes manifests.
+The chart creates Kubernetes `SecretProviderClass` resources that integrate with AWS Secrets Manager, allowing the platform to securely access secrets stored in AWS without embedding them in the application code or Kubernetes manifests.
 
 ## Components
 
@@ -33,13 +33,13 @@ If you have used the reference architecture Terraform modules, the RDS, Redis, O
 
 ```bash
 aws secretsmanager create-secret \
---name match-docker-secret \
+--name snicketlabs-docker-secret \
 --description "Docker Hub credentials (dockerconfigjson)" \
 --region $YOUR_REGION\
 --secret-string $SECRET_JSON
 
 aws secretsmanager create-secret \
---name match-honeybadger-secret \
+--name snicketlabs-honeybadger-secret \
 --description "Honeybadger api secret" \
 --region $YOUR_REGION\
 --secret-string $SECRET_API_KEY
@@ -68,8 +68,10 @@ smtp:
 2. Install the chart:
 
 ```bash
-helm install secrets-configuration . -n match
+helm install secrets-configuration . -n snicketlabs --create-namespace
 ```
+
+Everything is created in the release namespace (`-n`), so install into the namespace the application runs in.
 
 ## Configuration
 
@@ -81,15 +83,26 @@ helm install secrets-configuration . -n match
 | `clusterName` | EKS cluster name | Yes |
 | `userSecretName` | Name of the user credentials secret | Yes |
 | `secretStoreRoleArn` | IAM role ARN for accessing secrets | Yes |
+| `dockerSecretName` | Name of the Docker registry secret in AWS Secrets Manager | No (default: `snicketlabs-docker-secret`) |
+| `honeybadgerSecretName` | Name of the Honeybadger secret in AWS Secrets Manager | No (default: `snicketlabs-honeybadger-secret`) |
+| `serviceAccount.name` | ServiceAccount the syncer runs as; the IRSA role must trust `<namespace>:<name>` | No (default: `secret-sync-sa`) |
+| `secretProviderClassPrefix` | Prefix for the SecretProviderClass names | No (default: none) |
 | `smtp.enabled` | Enable SMTP secret configuration | No (default: false) |
 | `smtp.smtpSecretName` | Name of the SMTP secret when enabled | Conditional |
+| `smtp.k8sSecretName` | Kubernetes Secret the SMTP credentials sync into | No (default: `smtp-secrets`) |
+| `k8sSecretNames.rdsPg` | Kubernetes Secret the RDS credentials sync into | No (default: `postgres-credentials`) |
+| `k8sSecretNames.api` | Kubernetes Secret the API secrets sync into | No (default: `api-secrets`) |
+| `k8sSecretNames.user` | Kubernetes Secret the owning user password syncs into | No (default: `owning-user-credentials`) |
+| `k8sSecretNames.redis` | Kubernetes Secret the Redis connection details sync into | No (default: `<clusterName>-redis`) |
+| `k8sSecretNames.docker` | Kubernetes Secret the Docker registry credentials sync into | No (default: `dockerconfig`) |
+| `k8sSecretNames.honeybadger` | Kubernetes Secret the Honeybadger API key syncs into | No (default: `honeybadger-api-key`) |
 
 ## How It Works
 
 1. The chart creates `SecretProviderClass` resources that define which secrets to retrieve from AWS Secrets Manager
 2. When a pod mounts the CSI volume referencing a `SecretProviderClass`, the ASCP driver authenticates using the IAM role
 3. The driver fetches the secrets from AWS Secrets Manager and makes them available to the pod as Kubernetes secrets
-4. The Match application can then reference these secrets using standard Kubernetes secret mechanisms
+4. The platform can then reference these secrets using standard Kubernetes secret mechanisms
 
 ## Notes
 
